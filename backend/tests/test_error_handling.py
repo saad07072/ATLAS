@@ -1,12 +1,17 @@
 import json
+import logging
+import os
 import unittest
+from unittest.mock import patch
 
 from fastapi import FastAPI, Query
 from starlette.types import Message, Scope
 
 from backend.app.config.settings import settings
+from backend.app.config.settings import Settings
 from backend.app.core.error_handlers import register_exception_handlers
 from backend.app.core.exceptions import ApplicationError
+from backend.app.core.logging_config import configure_logging
 from backend.app.main import app as application
 
 
@@ -103,11 +108,15 @@ class ErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_unexpected_error_returns_generic_response(self) -> None:
-        status, body = await request(
-            self.test_app,
-            "/unexpected-error",
-            expect_server_exception=True,
-        )
+        with self.assertLogs(
+            "backend.app.core.error_handlers",
+            level="ERROR",
+        ) as captured:
+            status, body = await request(
+                self.test_app,
+                "/unexpected-error",
+                expect_server_exception=True,
+            )
 
         self.assertEqual(status, 500)
         self.assertEqual(
@@ -120,6 +129,7 @@ class ErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertNotIn("internal details", json.dumps(body))
+        self.assertTrue(any("Unhandled exception" in line for line in captured.output))
 
     async def test_invalid_request_uses_fastapi_validation_response(self) -> None:
         status, body = await request(
@@ -150,3 +160,56 @@ class ErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
     async def test_main_app_registers_central_error_handlers(self) -> None:
         self.assertIn(ApplicationError, application.exception_handlers)
         self.assertIn(Exception, application.exception_handlers)
+
+    async def test_application_metadata_and_health_schema(self) -> None:
+        self.assertEqual(application.title, settings.app_name)
+        self.assertEqual(application.version, settings.app_version)
+        self.assertIn(
+            "HealthResponse",
+            application.openapi()["components"]["schemas"],
+        )
+
+    async def test_settings_defaults(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            configured = Settings(_env_file=None)
+
+        self.assertEqual(configured.app_name, "ATLAS")
+        self.assertEqual(configured.app_version, "0.1.0")
+        self.assertEqual(configured.environment, "development")
+        self.assertTrue(configured.debug)
+        self.assertEqual(configured.log_level, "INFO")
+
+    async def test_environment_variables_override_settings_defaults(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "APP_NAME": "ATLAS Test",
+                "APP_VERSION": "2.0.0",
+                "ENVIRONMENT": "testing",
+                "DEBUG": "false",
+                "LOG_LEVEL": "ERROR",
+            },
+            clear=True,
+        ):
+            configured = Settings(_env_file=None)
+
+        self.assertEqual(configured.app_name, "ATLAS Test")
+        self.assertEqual(configured.app_version, "2.0.0")
+        self.assertEqual(configured.environment, "testing")
+        self.assertFalse(configured.debug)
+        self.assertEqual(configured.log_level, "ERROR")
+
+    async def test_configured_log_level_is_applied(self) -> None:
+        configure_logging("WARNING")
+
+        self.assertEqual(logging.getLogger().level, logging.WARNING)
+
+    async def test_startup_initializes_logging_and_logs_startup(self) -> None:
+        with self.assertLogs("backend.app.main", level="INFO") as captured:
+            async with application.router.lifespan_context(application):
+                self.assertEqual(
+                    logging.getLogger().level,
+                    logging.getLevelNamesMapping()[settings.log_level],
+                )
+
+        self.assertTrue(any("Starting ATLAS" in line for line in captured.output))
