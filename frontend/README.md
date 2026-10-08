@@ -1,6 +1,6 @@
 # ATLAS Frontend Foundation
 
-**Phase 2 Frontend Foundation** — A clean, production-ready interface for the ATLAS Autonomous Task & Life Assistant System.
+**Frontend foundation** — A clean, production-ready interface with Phase 4 conversational chat integration for ATLAS.
 
 ## Overview
 
@@ -17,18 +17,16 @@ This is the **frontend foundation only**. It provides:
 - ✅ Type-safe architecture with TypeScript
 - ✅ Clean, professional UI
 
-## Not Included (Future Phases)
+## Not Included
 
 This phase deliberately does **not** include:
 
-- LLM integration or AI agent logic
 - Real authentication or OAuth
 - Database or persistent memory
 - External service integrations (Google, GitHub, etc.)
-- Tool execution or permission engine
+- Tool execution or permission engine (chat responses do not execute actions)
 - Voice functionality (UI placeholder only)
 - Workflow automation
-- Real API implementations
 
 The architecture is designed to make it easy to add these features in later phases.
 
@@ -49,7 +47,7 @@ npm install
 
 # Create environment file
 cp .env.example .env.local
-# Edit .env.local if needed (defaults to http://127.0.0.1:8000)
+# Edit .env.local if needed (defaults to http://127.0.0.1:8001)
 
 # Start development server
 npm run dev
@@ -108,14 +106,16 @@ frontend/
 
 - Centralized API configuration
 - Environment variable support: `NEXT_PUBLIC_API_BASE_URL`
+- Chat: `POST /api/v1/chat`
 - Type-safe request handling
 - Health check integration
 
-Default backend: **http://127.0.0.1:8000** (configurable via env)
+Default backend: **http://127.0.0.1:8001** (configurable via env)
 
 ### Routes Used
 
 - `GET /api/v1/health` — Backend health check
+- `POST /api/v1/chat` — Conversational assistant response
 - Ready for: chat, activities, memory, services (future phases)
 
 ## Styling
@@ -157,4 +157,4 @@ npm run lint   # Check code quality
 
 **Phase 2 Complete** ✅
 
-Ready for Phase 3 (Agent) and Phase 4 (Tools).
+Chat is connected to the Phase 4 basic agent. Other integrations and tool execution remain future work.
