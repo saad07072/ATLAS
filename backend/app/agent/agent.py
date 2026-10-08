@@ -7,6 +7,8 @@ from backend.app.agent.models import ChatIntent, ChatRequest, ChatResponse
 from backend.app.agent.providers.base import LLMProvider
 from backend.app.agent.providers.errors import LLMProviderError
 from backend.app.agent.providers.models import LLMMessage, LLMRequest
+from backend.app.tools.executor import ToolExecutionService
+from backend.app.tools.models import ToolExecutionRequest, ToolResult
 
 MAX_RESPONSE_CHARACTERS = 8000
 CAPABILITIES_RESPONSE = (
@@ -89,9 +91,16 @@ class ChatAgent:
         provider: LLMProvider,
         *,
         secret: str | None = None,
+        tool_executor: ToolExecutionService | None = None,
     ) -> None:
         self.provider = provider
         self.secret = secret
+        self.tool_executor = tool_executor
+
+    def execute_tool_request(self, request: ToolExecutionRequest) -> ToolResult:
+        if self.tool_executor is None:
+            raise ChatAgentError("Tool execution is not configured.")
+        return self.tool_executor.execute(request)
 
     def respond(self, request: ChatRequest) -> ChatResponse:
         intent = classify_intent(request)
