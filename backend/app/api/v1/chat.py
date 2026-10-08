@@ -6,7 +6,7 @@ from backend.app.agent.providers.errors import LLMProviderError
 from backend.app.agent.providers.factory import get_llm_provider
 from backend.app.config.settings import settings
 from backend.app.core.exceptions import ApplicationError
-from backend.app.tools.demo import create_demo_tool_service
+from backend.app.integrations.google.runtime import get_google_tool_executor
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ def get_chat_agent() -> ChatAgent:
     return ChatAgent(
         provider=provider,
         secret=settings.gemini_api_key,
-        tool_executor=create_demo_tool_service(),
+        tool_executor=get_google_tool_executor(),
     )
 
 

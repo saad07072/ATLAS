@@ -18,6 +18,11 @@ export interface ChatApiResponse {
   requires_clarification: boolean;
 }
 
+export interface GoogleConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+}
+
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 
@@ -52,4 +57,8 @@ export async function sendChatMessage(
     },
     body: JSON.stringify({ message, history }),
   });
+}
+
+export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatus> {
+  return request<GoogleConnectionStatus>("/api/v1/google/status");
 }

@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_default_system_instruction: str | None = None
 
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str | None = None
+    google_token_encryption_key: str | None = None
+    google_token_db_path: str = "backend/data/google_tokens.sqlite3"
+    google_api_timeout_seconds: float = 15.0
+
     model_config = SettingsConfigDict(
         env_file="backend/.env",
         env_file_encoding="utf-8",
