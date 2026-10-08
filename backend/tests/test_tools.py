@@ -4,17 +4,23 @@ from unittest.mock import Mock
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agent.agent import ChatAgent, ChatAgentError
+from backend.app.security.models import (
+    AuthorizationResult,
+    PermissionContext,
+    PermissionDecision,
+    PermissionId,
+    RiskLevel,
+)
+from backend.app.security.permissions import PermissionEngine
+from backend.app.security.policy import PermissionPolicy, PermissionRule
 from backend.app.tools.base import Tool
-from backend.app.tools.demo import EchoInput, EchoOutput, EchoTool
+from backend.app.tools.demo import EchoInput, EchoTool
 from backend.app.tools.errors import (
     DuplicateToolError,
     InvalidToolArgumentsError,
     UnknownToolError,
 )
-from backend.app.tools.executor import (
-    DefaultPermissionBoundary,
-    ToolExecutionService,
-)
+from backend.app.tools.executor import ToolExecutionService
 from backend.app.tools.models import ToolExecutionRequest
 from backend.app.tools.registry import ToolRegistry
 
@@ -37,6 +43,7 @@ class RecordingTool(Tool):
     input_schema = RecordingInput
     output_schema = RecordingOutput
     permission_required = False
+    permission_id = PermissionId.TEST_RECORD.value
 
     def __init__(self, events: list[str]) -> None:
         self.events = events
@@ -49,15 +56,47 @@ class RecordingTool(Tool):
 class FailingTool(RecordingTool):
     name = "test.failing"
 
-    def execute(self, arguments: BaseModel) -> BaseModel:
+    def execute(self, _arguments: BaseModel) -> BaseModel:
         raise RuntimeError("internal secret must not be returned")
 
 
 class InvalidResultTool(RecordingTool):
     name = "test.invalid-result"
 
-    def execute(self, arguments: BaseModel) -> BaseModel:
+    def execute(self, _arguments: BaseModel) -> BaseModel:
         return object()
+
+
+def create_test_service(registry: ToolRegistry) -> ToolExecutionService:
+    return ToolExecutionService(
+        registry,
+        PermissionEngine(
+            PermissionPolicy(
+                {
+                    ("system.echo", PermissionId.SYSTEM_ECHO): PermissionRule(
+                        allowed=True,
+                        risk_level=RiskLevel.LOW,
+                        permission_required=False,
+                    ),
+                    ("test.recording", PermissionId.TEST_RECORD): PermissionRule(
+                        allowed=True,
+                        risk_level=RiskLevel.LOW,
+                        permission_required=False,
+                    ),
+                    ("test.failing", PermissionId.TEST_RECORD): PermissionRule(
+                        allowed=True,
+                        risk_level=RiskLevel.LOW,
+                        permission_required=False,
+                    ),
+                    ("test.invalid-result", PermissionId.TEST_RECORD): PermissionRule(
+                        allowed=True,
+                        risk_level=RiskLevel.LOW,
+                        permission_required=False,
+                    ),
+                }
+            )
+        ),
+    )
 
 
 class ToolFrameworkTests(unittest.TestCase):
@@ -102,7 +141,7 @@ class ToolFrameworkTests(unittest.TestCase):
                     self.echo.validate_input(arguments)
 
     def test_demo_executes_and_validates_structured_result(self) -> None:
-        service = ToolExecutionService(self.registry, DefaultPermissionBoundary())
+        service = create_test_service(self.registry)
 
         result = service.execute(
             ToolExecutionRequest(
@@ -117,7 +156,7 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertGreaterEqual(result.metadata.duration_ms, 0)
 
     def test_unknown_tool_request_returns_safe_failure(self) -> None:
-        service = ToolExecutionService(self.registry, DefaultPermissionBoundary())
+        service = create_test_service(self.registry)
 
         result = service.execute(
             ToolExecutionRequest(name="private.internal", arguments={})
@@ -130,13 +169,30 @@ class ToolFrameworkTests(unittest.TestCase):
     def test_permission_boundary_runs_before_execution(self) -> None:
         events: list[str] = []
 
-        class RecordingBoundary:
-            def authorize(self, tool_name: str, permission_required: bool) -> None:
+        class RecordingPolicy(PermissionPolicy):
+            def evaluate(
+                self,
+                context: PermissionContext | None,
+            ) -> AuthorizationResult:
                 events.append("authorize")
+                return super().evaluate(context)
 
         registry = ToolRegistry()
         registry.register(RecordingTool(events))
-        service = ToolExecutionService(registry, RecordingBoundary())
+        service = ToolExecutionService(
+            registry,
+            PermissionEngine(
+                RecordingPolicy(
+                    {
+                        ("test.recording", PermissionId.TEST_RECORD): PermissionRule(
+                            allowed=True,
+                            risk_level=RiskLevel.LOW,
+                            permission_required=False,
+                        )
+                    }
+                )
+            ),
+        )
         result = service.execute(
             ToolExecutionRequest(
                 name="test.recording",
@@ -153,7 +209,7 @@ class ToolFrameworkTests(unittest.TestCase):
         tool.permission_required = True
         registry = ToolRegistry()
         registry.register(tool)
-        service = ToolExecutionService(registry, DefaultPermissionBoundary())
+        service = create_test_service(registry)
 
         result = service.execute(
             ToolExecutionRequest(
@@ -169,7 +225,7 @@ class ToolFrameworkTests(unittest.TestCase):
     def test_tool_execution_failure_is_normalized_without_secret(self) -> None:
         registry = ToolRegistry()
         registry.register(FailingTool([]))
-        service = ToolExecutionService(registry, DefaultPermissionBoundary())
+        service = create_test_service(registry)
 
         result = service.execute(
             ToolExecutionRequest(
@@ -185,7 +241,7 @@ class ToolFrameworkTests(unittest.TestCase):
     def test_invalid_tool_result_is_reported_safely(self) -> None:
         registry = ToolRegistry()
         registry.register(InvalidResultTool([]))
-        service = ToolExecutionService(registry, DefaultPermissionBoundary())
+        service = create_test_service(registry)
 
         result = service.execute(
             ToolExecutionRequest(
@@ -198,7 +254,7 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertEqual(result.error.code, "invalid_result")
 
     def test_arbitrary_code_string_is_only_echoed_as_data(self) -> None:
-        service = ToolExecutionService(self.registry, DefaultPermissionBoundary())
+        service = create_test_service(self.registry)
         code = "__import__('os').system('whoami')"
 
         result = service.execute(
@@ -215,7 +271,7 @@ class ToolFrameworkTests(unittest.TestCase):
         provider = Mock()
         registry = ToolRegistry()
         registry.register(self.echo)
-        service = ToolExecutionService(registry, DefaultPermissionBoundary())
+        service = create_test_service(registry)
         agent = ChatAgent(provider, tool_executor=service)
 
         result = agent.execute_tool_request(

@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.security.models import AuthorizationResult
+
 
 ToolRiskLevel = Literal["low", "medium", "high", "critical"]
 
@@ -23,6 +25,7 @@ class ToolResult(BaseModel):
     output: dict[str, Any] | None = None
     error: ToolErrorInfo | None = None
     metadata: ToolExecutionMetadata
+    authorization: AuthorizationResult | None = None
 
 
 class ToolMetadata(BaseModel):
@@ -30,6 +33,7 @@ class ToolMetadata(BaseModel):
     description: str
     input_schema: dict[str, Any]
     permission_required: bool
+    permission_id: str | None = None
     risk_level: ToolRiskLevel
 
 

@@ -1,7 +1,9 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.security.permissions import PermissionEngine
+from backend.app.security.policy import default_permission_policy
 from backend.app.tools.base import Tool
-from backend.app.tools.executor import DefaultPermissionBoundary, ToolExecutionService
+from backend.app.tools.executor import ToolExecutionService
 from backend.app.tools.registry import ToolRegistry
 
 
@@ -23,6 +25,7 @@ class EchoTool(Tool):
     input_schema = EchoInput
     output_schema = EchoOutput
     permission_required = False
+    permission_id = "system.echo"
     risk_level = "low"
 
     def execute(self, arguments: BaseModel) -> BaseModel:
@@ -34,4 +37,7 @@ class EchoTool(Tool):
 def create_demo_tool_service() -> ToolExecutionService:
     registry = ToolRegistry()
     registry.register(EchoTool())
-    return ToolExecutionService(registry, DefaultPermissionBoundary())
+    return ToolExecutionService(
+        registry,
+        PermissionEngine(default_permission_policy()),
+    )

@@ -17,6 +17,7 @@ class Tool(ABC):
     input_schema: ClassVar[type[BaseModel]]
     output_schema: ClassVar[type[BaseModel]]
     permission_required: ClassVar[bool] = True
+    permission_id: ClassVar[str | None] = None
     risk_level: ClassVar[ToolRiskLevel] = "low"
 
     @abstractmethod
@@ -48,5 +49,6 @@ class Tool(ABC):
             description=self.description,
             input_schema=self.input_schema.model_json_schema(),
             permission_required=self.permission_required,
+            permission_id=self.permission_id,
             risk_level=self.risk_level,
         )
