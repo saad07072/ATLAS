@@ -23,6 +23,11 @@ export interface GoogleConnectionStatus {
   connected: boolean;
 }
 
+export interface GitHubConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+}
+
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 
@@ -61,4 +66,8 @@ export async function sendChatMessage(
 
 export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatus> {
   return request<GoogleConnectionStatus>("/api/v1/google/status");
+}
+
+export async function getGitHubConnectionStatus(): Promise<GitHubConnectionStatus> {
+  return request<GitHubConnectionStatus>("/api/v1/github/status");
 }

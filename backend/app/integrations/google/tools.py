@@ -18,12 +18,11 @@ from backend.app.integrations.google.models import (
 )
 from backend.app.integrations.google.service import GoogleApiClient
 from backend.app.security.models import PermissionId, RiskLevel
-from backend.app.security.policy import PermissionPolicy, PermissionRule
 from backend.app.tools.base import Tool
 from backend.app.tools.errors import ToolFrameworkError
 from backend.app.tools.executor import ToolExecutionService
+from backend.app.tools.factory import create_tool_execution_service
 from backend.app.tools.models import ToolErrorInfo
-from backend.app.tools.registry import ToolRegistry
 from backend.app.tools.demo import EchoTool
 
 
@@ -365,10 +364,7 @@ class GmailReplyTool(GoogleTool):
         )
 
 
-def create_google_tool_service(
-    google: GoogleApiClient,
-) -> ToolExecutionService:
-    registry = ToolRegistry()
+def create_google_tools(google: GoogleApiClient) -> list[Tool]:
     tools: list[Tool] = [
         EchoTool(),
         CalendarListEventsTool(),
@@ -384,26 +380,15 @@ def create_google_tool_service(
         GmailReplyTool(),
     ]
     for tool in tools:
-        tool.google = google
-        registry.register(tool)
+        if isinstance(tool, GoogleTool):
+            tool.google = google
+    return tools
 
-    rules: dict[tuple[str, PermissionId], PermissionRule] = {
-        ("system.echo", PermissionId.SYSTEM_ECHO): PermissionRule(
-            allowed=True,
-            risk_level=RiskLevel.LOW,
-            permission_required=False,
-        )
-    }
-    permission_by_string = {permission.value: permission for permission in PermissionId}
-    for tool in tools:
-        permission = permission_by_string[tool.permission_id]
-        rules[(tool.name, permission)] = PermissionRule(
-            allowed=True,
-            risk_level=RiskLevel(tool.risk_level),
-            permission_required=tool.permission_required,
-        )
 
-    return ToolExecutionService(registry, PermissionPolicy(rules))
+def create_google_tool_service(
+    google: GoogleApiClient,
+) -> ToolExecutionService:
+    return create_tool_execution_service(create_google_tools(google))
 
 
 def _validate_interval(start: datetime, end: datetime) -> None:

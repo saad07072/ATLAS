@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +29,12 @@ class Settings(BaseSettings):
     google_token_encryption_key: str | None = None
     google_token_db_path: str = "backend/data/google_tokens.sqlite3"
     google_api_timeout_seconds: float = 15.0
+
+    github_app_id: str | None = None
+    github_installation_id: str | None = None
+    github_private_key: str | None = Field(default=None, repr=False)
+    github_private_key_path: str | None = None
+    github_api_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
 
     model_config = SettingsConfigDict(
         env_file="backend/.env",
