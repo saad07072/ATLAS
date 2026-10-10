@@ -2,8 +2,10 @@
 
 ATLAS stores only explicitly submitted memories in Supabase PostgreSQL. The
 memory service does not save conversation messages or unreviewed model output.
-Each row belongs to a Supabase Auth user, and row-level security restricts
-authenticated Data API access to that owner.
+Each row belongs to a Supabase Auth user. The backend validates the access-token
+subject, scopes each SQL operation to that owner, and applies the authenticated
+role/claims in the database transaction so the row-level security policies
+remain active for the direct PostgreSQL connection.
 
 ## Apply the migration
 
@@ -18,7 +20,7 @@ authenticated Data API access to that owner.
 
    This uses the linked cloud project; a local Supabase stack or Docker is not
    required.
-4. Configure the backend's server-side `DATABASE_URL` with the project's
+3. Configure the backend's server-side `DATABASE_URL` with the project's
    PostgreSQL connection string. Prefer the session pooler for deployed
    environments when direct database connectivity is unavailable. Never put
    this credential in frontend configuration or Git.
@@ -29,12 +31,10 @@ filters.
 
 ## Authentication boundary
 
-The current application has no authenticated-user identity provider. The
-memory API therefore returns `401 authentication_required` by default, and
-chat does not retrieve or persist memory for anonymous requests. Do not replace
-this fail-closed behavior with a client-supplied user ID. Integrate a trusted
-Supabase Auth identity provider before exposing memory to users; the migration
-already enables owner-scoped RLS for authenticated Supabase Data API access.
+Memory endpoints require the authenticated-user dependency and reject missing
+or invalid tokens. Database role switching and owner-scoped RLS are described
+in the [authentication setup guide](./authentication.md). Never replace this
+boundary with a client-supplied user ID.
 
 Memory creation is explicit. Reusing the same `(user, type, memory_key)`
 updates that entry, so newer information replaces rather than silently

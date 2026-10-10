@@ -331,6 +331,11 @@ class MemoryServiceTests(unittest.TestCase):
     def test_delete_excludes_memory_from_later_retrieval(self) -> None:
         record = self.service.create(USER_ID, create_candidate())
 
+        self.assertFalse(self.service.delete(OTHER_USER_ID, record.id))
+        self.assertEqual(
+            self.service.retrieve(USER_ID, "current project")[0].id,
+            record.id,
+        )
         self.assertTrue(self.service.delete(USER_ID, record.id))
         self.assertEqual(self.service.retrieve(USER_ID, "current project"), [])
         self.assertFalse(self.service.delete(USER_ID, record.id))
@@ -432,6 +437,13 @@ class PostgresMemoryRepositoryTests(unittest.TestCase):
         self.assertIn("DELETE FROM public.atlas_memories", sql)
         self.assertIn("WHERE user_id = %s AND id = %s", sql)
         self.assertEqual(params[0], USER_ID)
+        statements = [
+            call.args[0].strip()
+            for call in self.connection.execute.call_args_list
+        ]
+        self.assertEqual(statements[0], "SET LOCAL ROLE authenticated")
+        self.assertIn("set_config('request.jwt.claim.sub'", statements[1])
+        self.assertIn('"sub": "' + USER_ID + '"', self.connection.execute.call_args_list[1].args[1][1])
 
     def test_database_errors_are_translated_without_exposing_details(self) -> None:
         self.connect.side_effect = psycopg.OperationalError(

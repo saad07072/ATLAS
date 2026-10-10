@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import json
 from typing import Any, Protocol
 
 from backend.app.memory.errors import (
@@ -57,6 +58,7 @@ class PostgresMemoryRepository:
         limit: int = 50,
     ) -> list[MemoryRecord]:
         rows = self._run(
+            user_id,
             lambda connection: connection.execute(
                 """
                 SELECT id::text AS id, memory_type AS type, memory_key, content,
@@ -79,6 +81,7 @@ class PostgresMemoryRepository:
         source: str,
     ) -> MemoryRecord:
         row = self._run(
+            user_id,
             lambda connection: connection.execute(
                 """
                 INSERT INTO public.atlas_memories
@@ -125,6 +128,7 @@ class PostgresMemoryRepository:
 
         values.extend((user_id, memory_id))
         row = self._run(
+            user_id,
             lambda connection: connection.execute(
                 f"""
                 UPDATE public.atlas_memories
@@ -140,6 +144,7 @@ class PostgresMemoryRepository:
 
     def delete(self, user_id: str, memory_id: str) -> bool:
         row = self._run(
+            user_id,
             lambda connection: connection.execute(
                 """
                 DELETE FROM public.atlas_memories
@@ -160,6 +165,7 @@ class PostgresMemoryRepository:
         limit: int = 5,
     ) -> list[MemoryRecord]:
         rows = self._run(
+            user_id,
             lambda connection: connection.execute(
                 """
                 WITH search_query AS (
@@ -197,7 +203,7 @@ class PostgresMemoryRepository:
         )
         return [MemoryRecord.model_validate(row) for row in rows]
 
-    def _run(self, operation: Callable[[Any], Any]) -> Any:
+    def _run(self, user_id: str, operation: Callable[[Any], Any]) -> Any:
         if not self._database_url:
             raise MemoryStoreUnavailable(
                 "Persistent memory storage is not configured."
@@ -216,6 +222,22 @@ class PostgresMemoryRepository:
                 row_factory=dict_row,
                 connect_timeout=5,
             ) as connection:
+                claims = json.dumps(
+                    {
+                        "aud": "authenticated",
+                        "role": "authenticated",
+                        "sub": user_id,
+                    }
+                )
+                connection.execute("SET LOCAL ROLE authenticated")
+                connection.execute(
+                    """
+                    SELECT
+                        set_config('request.jwt.claim.sub', %s, true),
+                        set_config('request.jwt.claims', %s, true)
+                    """,
+                    (user_id, claims),
+                )
                 return operation(connection)
         except psycopg.errors.UniqueViolation:
             raise MemoryConflict(

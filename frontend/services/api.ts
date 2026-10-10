@@ -1,4 +1,5 @@
 import type { ApiHealthResponse, MemoryItem, MemoryListResponse } from "@/types";
+import { getSupabaseAccessToken } from "@/services/supabase";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001";
 
@@ -21,21 +22,25 @@ export interface ChatApiResponse {
 export interface GoogleConnectionStatus {
   configured: boolean;
   connected: boolean;
+  actions_enabled: boolean;
 }
 
 export interface GitHubConnectionStatus {
   configured: boolean;
   connected: boolean;
+  actions_enabled: boolean;
 }
 
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const accessToken = await getSupabaseAccessToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
       Accept: "application/json",
       ...(init?.headers ?? {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
     ...init,
   });
@@ -71,6 +76,13 @@ export async function sendChatMessage(
 
 export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatus> {
   return request<GoogleConnectionStatus>("/api/v1/google/status");
+}
+
+export async function getGoogleOAuthStartUrl(): Promise<string> {
+  const response = await request<{ authorization_url: string }>(
+    "/api/v1/google/oauth/start",
+  );
+  return response.authorization_url;
 }
 
 export async function getGitHubConnectionStatus(): Promise<GitHubConnectionStatus> {

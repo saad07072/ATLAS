@@ -4,7 +4,6 @@ import type { JSX } from "react";
 import { useEffect, useState } from "react";
 
 import {
-  apiBaseUrl,
   getGitHubConnectionStatus,
   getGoogleConnectionStatus,
 } from "@/services/api";
@@ -97,13 +96,17 @@ export default function ConnectedServicesPage(): JSX.Element {
               ? "Unavailable"
               : isConnected
                 ? "Connected"
-                : "Disconnected"
+                : googleStatus.actions_enabled
+                  ? "Disconnected"
+                  : "Unavailable"
             : isGitHub
               ? githubStatus === null || githubStatusUnavailable
                 ? "Unavailable"
                 : githubStatus.connected
                   ? "Connected"
-                  : "Disconnected"
+                  : githubStatus.actions_enabled
+                    ? "Disconnected"
+                    : "Unavailable"
               : service.status;
 
           return (
@@ -129,27 +132,18 @@ export default function ConnectedServicesPage(): JSX.Element {
                 </p>
               )}
               {service.id === "google-calendar" ? (
-                googleStatus?.configured && !isConnected ? (
-                  <a
-                    className="ghost-button"
-                    href={`${apiBaseUrl}/api/v1/google/oauth/start`}
-                  >
-                    Connect Google
-                  </a>
-                ) : (
-                  <button type="button" className="ghost-button" disabled>
-                    {isConnected ? "Google connected" : "Connect unavailable"}
-                  </button>
-                )
+                <button type="button" className="ghost-button" disabled>
+                  {isConnected ? "Google connected" : "Per-user connection unavailable"}
+                </button>
               ) : (
                 <button type="button" className="ghost-button" disabled>
                   {service.id === "gmail"
                     ? isConnected
                       ? "Uses Google connection"
-                      : "Connect unavailable"
+                      : "Per-user connection unavailable"
                     : githubStatus?.connected
                       ? "GitHub App configured"
-                      : "GitHub configuration required"}
+                      : "Per-user connection unavailable"}
                 </button>
               )}
             </article>

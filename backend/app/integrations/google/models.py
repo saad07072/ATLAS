@@ -21,6 +21,7 @@ class GoogleCredentials(BaseModel):
 class GoogleConnectionStatus(BaseModel):
     configured: bool
     connected: bool
+    actions_enabled: bool
 
 
 class OAuthTokenResponse(BaseModel):

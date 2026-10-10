@@ -15,13 +15,13 @@ This is the **frontend foundation only**. It provides:
 - ✅ Responsive design (desktop, tablet, mobile)
 - ✅ Backend health check integration
 - ✅ Type-safe architecture with TypeScript
+- ✅ Supabase Auth email magic-link sign-in
 - ✅ Clean, professional UI
 
 ## Not Included
 
 This phase deliberately does **not** include:
 
-- Real authentication or OAuth
 - Database or persistent memory
 - External service integrations (Google, GitHub, etc.)
 - Tool execution or permission engine (chat responses do not execute actions)
@@ -47,13 +47,16 @@ npm install
 
 # Create environment file
 cp .env.example .env.local
-# Edit .env.local if needed (defaults to http://127.0.0.1:8001)
+# Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
+# Set NEXT_PUBLIC_API_BASE_URL if the backend is not at http://127.0.0.1:8001.
 
 # Start development server
 npm run dev
 ```
 
 The app runs on **http://localhost:3000**.
+Configure the matching Supabase Auth redirect URLs and backend JWT verification
+as described in [docs/authentication.md](../docs/authentication.md).
 
 ### Build
 

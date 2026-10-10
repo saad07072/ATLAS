@@ -10,7 +10,7 @@ from backend.app.config.settings import settings
 from backend.app.core.exceptions import ApplicationError
 from backend.app.integrations.github.runtime import get_tool_executor
 from backend.app.memory.runtime import get_memory_service
-from backend.app.security.identity import get_optional_authenticated_user_id
+from backend.app.security.identity import get_authenticated_user_id
 
 router = APIRouter()
 
@@ -37,12 +37,12 @@ def get_chat_agent() -> ChatAgent:
 def chat(
     request: ChatRequest,
     agent: ChatAgent = Depends(get_chat_agent),
-    memory_user_id: UUID | None = Depends(get_optional_authenticated_user_id),
+    memory_user_id: UUID = Depends(get_authenticated_user_id),
 ) -> ChatResponse:
     try:
         return agent.respond(
             request,
-            memory_user_id=str(memory_user_id) if memory_user_id else None,
+            memory_user_id=str(memory_user_id),
         )
     except ChatAgentError as exc:
         raise ApplicationError(
