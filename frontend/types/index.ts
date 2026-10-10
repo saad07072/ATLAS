@@ -39,13 +39,24 @@ export interface ActivityItem {
   error?: string;
 }
 
+export type MemoryType =
+  | "user_preference"
+  | "durable_fact"
+  | "project_context"
+  | "task_outcome";
+
 export interface MemoryItem {
   id: string;
-  title: string;
-  summary: string;
-  category: string;
-  updatedAt: string;
-  status: "Active" | "Draft" | "Needs Review";
+  type: MemoryType;
+  memory_key: string;
+  content: string;
+  source: "user" | "explicit_selection";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryListResponse {
+  memories: MemoryItem[];
 }
 
 export interface ServiceStatus {

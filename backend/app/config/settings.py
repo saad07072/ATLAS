@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     github_private_key_path: str | None = None
     github_api_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
 
+    database_url: str | None = Field(default=None, repr=False)
+
     model_config = SettingsConfigDict(
         env_file="backend/.env",
         env_file_encoding="utf-8",

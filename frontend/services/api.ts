@@ -1,4 +1,4 @@
-import type { ApiHealthResponse } from "@/types";
+import type { ApiHealthResponse, MemoryItem, MemoryListResponse } from "@/types";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001";
 
@@ -41,7 +41,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error("The ATLAS backend is unavailable right now.");
+    const body = (await response.json().catch(() => null)) as
+      | { error?: { message?: string } }
+      | null;
+    throw new Error(
+      body?.error?.message ?? "The ATLAS backend is unavailable right now.",
+    );
   }
 
   return (await response.json()) as T;
@@ -70,4 +75,15 @@ export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatu
 
 export async function getGitHubConnectionStatus(): Promise<GitHubConnectionStatus> {
   return request<GitHubConnectionStatus>("/api/v1/github/status");
+}
+
+export async function getMemories(): Promise<MemoryItem[]> {
+  const response = await request<MemoryListResponse>("/api/v1/memory");
+  return response.memories;
+}
+
+export async function deleteMemory(memoryId: string): Promise<void> {
+  await request<{ deleted: boolean }>(`/api/v1/memory/${encodeURIComponent(memoryId)}`, {
+    method: "DELETE",
+  });
 }

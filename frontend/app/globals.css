@@ -576,6 +576,14 @@ img {
   line-height: 1.6;
 }
 
+.memory-delete-button {
+  padding: 0.45rem 0.75rem;
+}
+
+.memory-success {
+  color: var(--success);
+}
+
 .memory-category,
 .meta-pill {
   display: inline-flex;
