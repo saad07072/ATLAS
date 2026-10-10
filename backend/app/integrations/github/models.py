@@ -61,3 +61,4 @@ class GitHubIssueCreated(BaseModel):
 class GitHubConnectionStatus(BaseModel):
     configured: bool
     connected: bool
+    actions_enabled: bool

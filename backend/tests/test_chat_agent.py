@@ -15,6 +15,8 @@ from backend.app.agent.providers.errors import (
 from backend.app.api.v1.chat import get_chat_agent, router
 from backend.app.core.error_handlers import register_exception_handlers
 from backend.app.core.exceptions import ApplicationError
+from backend.app.security.identity import get_authenticated_user_id
+from uuid import UUID
 
 
 def create_test_app(agent: ChatAgent) -> FastAPI:
@@ -22,6 +24,9 @@ def create_test_app(agent: ChatAgent) -> FastAPI:
     register_exception_handlers(test_app)
     test_app.include_router(router, prefix="/api/v1")
     test_app.dependency_overrides[get_chat_agent] = lambda: agent
+    test_app.dependency_overrides[get_authenticated_user_id] = lambda: UUID(
+        "ef3e7347-a8e9-4d63-90cf-a21d5c855515"
+    )
     return test_app
 
 
