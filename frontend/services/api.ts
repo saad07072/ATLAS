@@ -1,6 +1,32 @@
-import type { ApiHealthResponse } from "@/types";
+import type { ApiHealthResponse, MemoryItem, MemoryListResponse } from "@/types";
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001";
+
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatApiResponse {
+  intent:
+    | "conversation"
+    | "capability_question"
+    | "task_request"
+    | "clarification"
+    | "unsupported";
+  message: string;
+  requires_clarification: boolean;
+}
+
+export interface GoogleConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+}
+
+export interface GitHubConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+}
 
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
@@ -15,7 +41,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error("The ATLAS backend is unavailable right now.");
+    const body = (await response.json().catch(() => null)) as
+      | { error?: { message?: string } }
+      | null;
+    throw new Error(
+      body?.error?.message ?? "The ATLAS backend is unavailable right now.",
+    );
   }
 
   return (await response.json()) as T;
@@ -23,4 +54,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getHealth(): Promise<ApiHealthResponse> {
   return request<ApiHealthResponse>("/api/v1/health");
+}
+
+export async function sendChatMessage(
+  message: string,
+  history: ChatHistoryMessage[],
+): Promise<ChatApiResponse> {
+  return request<ChatApiResponse>("/api/v1/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message, history }),
+  });
+}
+
+export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatus> {
+  return request<GoogleConnectionStatus>("/api/v1/google/status");
+}
+
+export async function getGitHubConnectionStatus(): Promise<GitHubConnectionStatus> {
+  return request<GitHubConnectionStatus>("/api/v1/github/status");
+}
+
+export async function getMemories(): Promise<MemoryItem[]> {
+  const response = await request<MemoryListResponse>("/api/v1/memory");
+  return response.memories;
+}
+
+export async function deleteMemory(memoryId: string): Promise<void> {
+  await request<{ deleted: boolean }>(`/api/v1/memory/${encodeURIComponent(memoryId)}`, {
+    method: "DELETE",
+  });
 }

@@ -4,31 +4,16 @@ import type { JSX } from "react";
 import { useMemo, useState } from "react";
 
 import { ActivityIndicator } from "@/components/ui/activity-indicator";
+import { sendChatMessage } from "@/services/api";
 import type { ChatMessage } from "@/types";
 
 import { ChatMessageItem } from "./chat-message";
-
-const defaultMessages: ChatMessage[] = [
-  {
-    id: "welcome",
-    role: "assistant",
-    content:
-      "Hello. I am ATLAS, your task and life assistant foundation. Ask for a task, a plan, or a quick status update.",
-    timestamp: "Now",
-  },
-  {
-    id: "intro",
-    role: "user",
-    content: "Summarize my day and help me prioritize the most important task.",
-    timestamp: "Just now",
-  },
-];
 
 interface ChatPanelProps {
   initialMessages?: ChatMessage[];
 }
 
-export function ChatPanel({ initialMessages = defaultMessages }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ initialMessages = [] }: ChatPanelProps): JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -36,7 +21,7 @@ export function ChatPanel({ initialMessages = defaultMessages }: ChatPanelProps)
 
   const isEmptyConversation = useMemo(() => messages.length === 0, [messages]);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const trimmed = draft.trim();
 
@@ -56,17 +41,25 @@ export function ChatPanel({ initialMessages = defaultMessages }: ChatPanelProps)
     setError(null);
     setIsProcessing(true);
 
-    window.setTimeout(() => {
-      const response = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant" as const,
-        content: `ATLAS has received your request: “${trimmed}”. This message is being prepared for the next phase when the real agent and tool layer are connected.`,
-        timestamp: "Just now",
-      };
-
-      setMessages((currentMessages) => [...currentMessages, response]);
+    try {
+      const response = await sendChatMessage(
+        trimmed,
+        messages.slice(-12).map(({ role, content }) => ({ role, content })),
+      );
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: response.message,
+          timestamp: "Just now",
+        },
+      ]);
+    } catch {
+      setError("ATLAS could not complete this response. Please try again.");
+    } finally {
       setIsProcessing(false);
-    }, 650);
+    }
   }
 
   return (
@@ -76,7 +69,15 @@ export function ChatPanel({ initialMessages = defaultMessages }: ChatPanelProps)
           <p className="eyebrow">Assistant</p>
           <h2>ATLAS Conversation</h2>
         </div>
-        <button type="button" className="ghost-button" aria-label="Start a new chat">
+        <button
+          type="button"
+          className="ghost-button"
+          aria-label="Start a new chat"
+          onClick={() => {
+            setMessages([]);
+            setError(null);
+          }}
+        >
           New chat
         </button>
       </div>
@@ -86,7 +87,7 @@ export function ChatPanel({ initialMessages = defaultMessages }: ChatPanelProps)
       {isEmptyConversation ? (
         <div className="chat-empty-state">
           <h3>No messages yet</h3>
-          <p>Ask ATLAS to capture a task, summarize context, or outline the next action.</p>
+          <p>Ask ATLAS a question or get help planning, drafting, or summarizing.</p>
         </div>
       ) : (
         <div className="chat-message-list" aria-live="polite">
@@ -115,6 +116,7 @@ export function ChatPanel({ initialMessages = defaultMessages }: ChatPanelProps)
           <input
             id="atlas-message"
             type="text"
+            maxLength={4000}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Ask ATLAS anything..."
