@@ -98,3 +98,5 @@ export interface SettingGroup {
   description: string;
   state: string;
 }
+
+export * from "./speech";

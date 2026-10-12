@@ -234,6 +234,35 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(empty_status, 422)
         self.assertEqual(oversized_status, 422)
 
+    async def test_spoken_transcript_follows_identical_chat_and_auth_rules(self) -> None:
+        app = create_test_app(self.agent)
+        status_code, body = await request(
+            app,
+            "/api/v1/chat",
+            {"message": "What can you do to help me today?"},
+        )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(body["intent"], "capability_question")
+        self.assertIn("answer questions", body["message"])
+        self.assertIn("cannot perform actions", body["message"])
+        self.assertEqual(body["conversation_id"], "f7bd17ab-f527-49c8-a464-399b974b9c57")
+
+    async def test_spoken_transcript_with_credentials_is_rejected_at_boundary(self) -> None:
+        secret = "super-secret-credential"
+        agent = ChatAgent(self.provider, secret=secret)
+        app = create_test_app(agent)
+
+        status_code, body = await request(
+            app,
+            "/api/v1/chat",
+            {"message": f"Please remember my token: {secret}"},
+        )
+
+        self.assertEqual(status_code, 422)
+        self.assertEqual(body["error"]["code"], "invalid_chat_message")
+        self.assertNotIn(secret, json.dumps(body))
+
 
 if __name__ == "__main__":
     unittest.main()
