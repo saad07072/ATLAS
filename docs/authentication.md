@@ -52,6 +52,12 @@ account. Queries also explicitly scope every operation by the verified owner.
 If role switching, RLS context setup, or the database operation fails, the
 request fails safely instead of bypassing row policies.
 
+Conversation policies additionally require the backend-only `atlas_backend`
+transaction claim. The conversation repository sets it only after the API has
+validated the Supabase access token, so browser clients cannot write messages
+or impersonate assistant responses directly. Conversation ownership remains
+scoped to the authenticated token subject.
+
 Use a trusted server-side Supabase PostgreSQL connection string that can assume
 the `authenticated` role. Never use the Supabase `service_role` API key as a
 database substitute and never expose database credentials to the browser.

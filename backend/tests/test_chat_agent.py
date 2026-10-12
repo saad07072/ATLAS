@@ -13,6 +13,7 @@ from backend.app.agent.providers.errors import (
     ProviderConfigurationError,
 )
 from backend.app.api.v1.chat import get_chat_agent, router
+from backend.app.conversations.runtime import get_conversation_service
 from backend.app.core.error_handlers import register_exception_handlers
 from backend.app.core.exceptions import ApplicationError
 from backend.app.security.identity import get_authenticated_user_id
@@ -24,6 +25,11 @@ def create_test_app(agent: ChatAgent) -> FastAPI:
     register_exception_handlers(test_app)
     test_app.include_router(router, prefix="/api/v1")
     test_app.dependency_overrides[get_chat_agent] = lambda: agent
+    conversations = Mock()
+    conversations.create.return_value = Mock(id="f7bd17ab-f527-49c8-a464-399b974b9c57")
+    conversations.append_message.return_value = Mock(id="d1e71d12-70c8-40df-bf7b-6e3aa0905166")
+    conversations.get_context.return_value = []
+    test_app.dependency_overrides[get_conversation_service] = lambda: conversations
     test_app.dependency_overrides[get_authenticated_user_id] = lambda: UUID(
         "ef3e7347-a8e9-4d63-90cf-a21d5c855515"
     )
@@ -141,6 +147,7 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
                 "intent": "task_request",
                 "message": "A useful response.",
                 "requires_clarification": False,
+                "conversation_id": "f7bd17ab-f527-49c8-a464-399b974b9c57",
             },
         )
 

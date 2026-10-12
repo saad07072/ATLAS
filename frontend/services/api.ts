@@ -1,4 +1,11 @@
-import type { ApiHealthResponse, MemoryItem, MemoryListResponse } from "@/types";
+import type {
+  ApiHealthResponse,
+  ConversationDetailResponse,
+  ConversationListResponse,
+  ConversationSummary,
+  MemoryItem,
+  MemoryListResponse,
+} from "@/types";
 import { getSupabaseAccessToken } from "@/services/supabase";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001";
@@ -17,6 +24,7 @@ export interface ChatApiResponse {
     | "unsupported";
   message: string;
   requires_clarification: boolean;
+  conversation_id: string;
 }
 
 export interface GoogleConnectionStatus {
@@ -37,12 +45,12 @@ export const apiBaseUrl =
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const accessToken = await getSupabaseAccessToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
     headers: {
       Accept: "application/json",
       ...(init?.headers ?? {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
-    ...init,
   });
 
   if (!response.ok) {
@@ -63,15 +71,75 @@ export async function getHealth(): Promise<ApiHealthResponse> {
 
 export async function sendChatMessage(
   message: string,
-  history: ChatHistoryMessage[],
+  history: ChatHistoryMessage[] = [],
+  conversationId?: string,
 ): Promise<ChatApiResponse> {
   return request<ChatApiResponse>("/api/v1/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({
+      message,
+      ...(conversationId ? { conversation_id: conversationId } : { history }),
+    }),
   });
+}
+
+export async function getConversations(
+  limit = 100,
+  offset = 0,
+): Promise<ConversationListResponse> {
+  return request<ConversationListResponse>(
+    `/api/v1/conversations?limit=${limit}&offset=${offset}`,
+  );
+}
+
+export async function createConversation(
+  title?: string,
+): Promise<ConversationSummary> {
+  return request<ConversationSummary>("/api/v1/conversations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(title ? { title } : {}),
+  });
+}
+
+export async function getConversation(
+  conversationId: string,
+  limit = 100,
+  offset = 0,
+): Promise<ConversationDetailResponse> {
+  return request<ConversationDetailResponse>(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}?limit=${limit}&offset=${offset}`,
+  );
+}
+
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<ConversationSummary> {
+  return request<ConversationSummary>(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title }),
+    },
+  );
+}
+
+export async function deleteConversation(
+  conversationId: string,
+): Promise<void> {
+  await request<{ deleted: boolean }>(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatus> {
