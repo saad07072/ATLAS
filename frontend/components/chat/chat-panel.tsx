@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ActivityIndicator } from "@/components/ui/activity-indicator";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { useVoice } from "@/hooks/use-voice";
 import {
   createConversation,
   deleteConversation,
@@ -18,6 +19,24 @@ import type { ChatMessage, ConversationSummary } from "@/types";
 import { ChatMessageItem } from "./chat-message";
 
 export function ChatPanel(): JSX.Element {
+  const {
+    isRecognitionSupported,
+    isSynthesisSupported,
+    recognitionState,
+    interimTranscript,
+    recognitionError,
+    startListening,
+    stopListening,
+    cancelListening,
+    clearRecognitionError,
+    isSpeaking,
+    speakingMessageId,
+    settings: voiceSettings,
+    speak,
+    stopSpeaking,
+    toggleAutoSpeak,
+  } = useVoice();
+
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -128,6 +147,12 @@ export function ChatPanel(): JSX.Element {
     isLoadingEarlier;
 
   function selectConversation(conversationId: string | null): void {
+    if (isSpeaking) {
+      stopSpeaking();
+    }
+    if (recognitionState === "listening") {
+      cancelListening();
+    }
     loadSequence.current += 1;
     setMessageError(null);
     setOlderMessagesError(null);
@@ -147,6 +172,12 @@ export function ChatPanel(): JSX.Element {
   }
 
   async function handleStartConversation(): Promise<void> {
+    if (isSpeaking) {
+      stopSpeaking();
+    }
+    if (recognitionState === "listening") {
+      cancelListening();
+    }
     setConversationError(null);
     setIsSavingConversation(true);
     try {
@@ -171,6 +202,13 @@ export function ChatPanel(): JSX.Element {
       return;
     }
 
+    if (isSpeaking) {
+      stopSpeaking();
+    }
+    if (recognitionState === "listening") {
+      stopListening();
+    }
+
     const conversationId = selectedConversationId;
     setMessages((current) => [
       ...current,
@@ -190,15 +228,19 @@ export function ChatPanel(): JSX.Element {
       if (response.conversation_id !== conversationId) {
         throw new Error("The response conversation did not match the request.");
       }
+      const assistantMessageId = `assistant-${Date.now()}`;
       setMessages((current) => [
         ...current,
         {
-          id: `assistant-${Date.now()}`,
+          id: assistantMessageId,
           role: "assistant",
           content: response.message,
           timestamp: "Just now",
         },
       ]);
+      if (voiceSettings.autoSpeak && isSynthesisSupported) {
+        speak(response.message, assistantMessageId);
+      }
       try {
         const detail = await getConversation(conversationId, 1);
         setConversations((current) =>
@@ -510,6 +552,37 @@ export function ChatPanel(): JSX.Element {
             <p className="eyebrow">Assistant</p>
             <h2>{selectedConversation?.title ?? "ATLAS Conversation"}</h2>
           </div>
+          {isSynthesisSupported ? (
+            <div className="chat-header-actions">
+              {isSpeaking ? (
+                <div className="speaking-indicator" role="status">
+                  <span aria-hidden="true">🔊</span>
+                  <span>Speaking...</span>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => stopSpeaking()}
+                    aria-label="Stop speaking response"
+                  >
+                    Stop
+                  </button>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className={`ghost-button speech-toggle ${voiceSettings.autoSpeak ? "active" : ""}`}
+                onClick={() => toggleAutoSpeak()}
+                aria-pressed={voiceSettings.autoSpeak}
+                title={
+                  voiceSettings.autoSpeak
+                    ? "Voice responses are ON. Click to mute."
+                    : "Voice responses are OFF. Click to hear responses."
+                }
+              >
+                {voiceSettings.autoSpeak ? "🔊 Voice: ON" : "🔈 Voice: OFF"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {messageError ? (
@@ -574,7 +647,19 @@ export function ChatPanel(): JSX.Element {
               </div>
             ) : null}
             {messages.map((message) => (
-              <ChatMessageItem key={message.id} message={message} />
+              <ChatMessageItem
+                key={message.id}
+                message={message}
+                isSpeaking={isSpeaking && speakingMessageId === message.id}
+                onSpeak={
+                  isSynthesisSupported
+                    ? () => speak(message.content, message.id)
+                    : undefined
+                }
+                onStopSpeaking={
+                  isSynthesisSupported ? () => stopSpeaking() : undefined
+                }
+              />
             ))}
           </div>
         )}
@@ -589,14 +674,101 @@ export function ChatPanel(): JSX.Element {
           <label htmlFor="atlas-message" className="visually-hidden">
             Message ATLAS
           </label>
+
+          {recognitionError ? (
+            <div className="inline-error" role="alert">
+              <p>{recognitionError}</p>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => clearRecognitionError()}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
+          {recognitionState === "listening" ? (
+            <div className="voice-status-panel" role="status" aria-live="polite">
+              <div className="voice-status-indicator">
+                <span className="recording-dot" aria-hidden="true" />
+                <span>Listening... Speak your message</span>
+              </div>
+              {interimTranscript ? (
+                <p className="voice-interim-text">
+                  &ldquo;{interimTranscript}&rdquo;
+                </p>
+              ) : (
+                <p className="voice-interim-text" style={{ color: "var(--muted)" }}>
+                  Waiting for speech...
+                </p>
+              )}
+              <div className="voice-status-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => stopListening()}
+                >
+                  Done speaking
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => cancelListening()}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="chat-input-row">
+            <button
+              type="button"
+              className={`voice-button ${recognitionState === "listening" ? "recording" : ""}`}
+              onClick={() => {
+                if (recognitionState === "listening") {
+                  stopListening();
+                } else {
+                  clearRecognitionError();
+                  startListening((transcript) => {
+                    setDraft((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                  });
+                }
+              }}
+              disabled={
+                isBusy ||
+                !selectedConversationId ||
+                !isRecognitionSupported
+              }
+              aria-label={
+                !isRecognitionSupported
+                  ? "Voice input not supported in this browser"
+                  : recognitionState === "listening"
+                    ? "Stop voice input"
+                    : "Start voice input"
+              }
+              title={
+                !isRecognitionSupported
+                  ? "Voice input not supported in this browser"
+                  : recognitionState === "listening"
+                    ? "Click to stop listening"
+                    : "Click to speak"
+              }
+            >
+              {recognitionState === "listening" ? "🔴" : "🎙"}
+            </button>
             <input
               id="atlas-message"
               type="text"
               maxLength={4000}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Ask ATLAS anything..."
+              placeholder={
+                recognitionState === "listening"
+                  ? "Listening to your voice..."
+                  : "Ask ATLAS anything..."
+              }
               disabled={isBusy || !selectedConversationId}
               aria-label="Type your message to ATLAS"
             />
