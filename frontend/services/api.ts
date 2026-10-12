@@ -149,8 +149,15 @@ export async function getGoogleConnectionStatus(): Promise<GoogleConnectionStatu
 export async function getGoogleOAuthStartUrl(): Promise<string> {
   const response = await request<{ authorization_url: string }>(
     "/api/v1/google/oauth/start",
+    { credentials: "include" },
   );
   return response.authorization_url;
+}
+
+export async function disconnectGoogleConnection(): Promise<void> {
+  await request<{ status: string; message: string }>("/api/v1/google/connection", {
+    method: "DELETE",
+  });
 }
 
 export async function getGitHubConnectionStatus(): Promise<GitHubConnectionStatus> {

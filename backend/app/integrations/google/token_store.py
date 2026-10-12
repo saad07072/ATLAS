@@ -6,6 +6,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
+from typing import Protocol
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -13,9 +14,34 @@ from backend.app.integrations.google.errors import GoogleIntegrationError
 from backend.app.integrations.google.models import GoogleCredentials
 
 
-class EncryptedSQLiteTokenStore:
-    _TOKEN_KEY = "google"
+class GoogleCredentialStore(Protocol):
+    def save_credentials(
+        self, user_id: str, credentials: GoogleCredentials
+    ) -> None: ...
 
+    def load_credentials(self, user_id: str) -> GoogleCredentials | None: ...
+
+    def delete_credentials(self, user_id: str) -> None: ...
+
+    def store_state(
+        self,
+        user_id: str,
+        state: str,
+        binding_hash: str,
+        *,
+        expires_at: float,
+    ) -> None: ...
+
+    def consume_state(
+        self,
+        state: str,
+        binding_hash: str,
+        *,
+        now: float,
+    ) -> str | None: ...
+
+
+class EncryptedSQLiteTokenStore:
     def __init__(self, path: str, encryption_key: str) -> None:
         self.path = Path(path)
         try:
@@ -35,7 +61,11 @@ class EncryptedSQLiteTokenStore:
             ) from None
         self._initialize()
 
-    def save_credentials(self, credentials: GoogleCredentials) -> None:
+    def save_credentials(
+        self,
+        user_id: str,
+        credentials: GoogleCredentials,
+    ) -> None:
         encrypted = self._fernet.encrypt(
             credentials.model_dump_json().encode("utf-8")
         )
@@ -43,11 +73,11 @@ class EncryptedSQLiteTokenStore:
             with self._lock, closing(self._connect()) as connection, connection:
                 connection.execute(
                     """
-                    INSERT INTO google_credentials (id, payload)
+                    INSERT INTO google_credentials (user_id, payload)
                     VALUES (?, ?)
-                    ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
+                    ON CONFLICT(user_id) DO UPDATE SET payload = excluded.payload
                     """,
-                    (self._TOKEN_KEY, encrypted),
+                    (user_id, encrypted),
                 )
         except sqlite3.Error:
             raise GoogleIntegrationError(
@@ -55,12 +85,12 @@ class EncryptedSQLiteTokenStore:
                 "Google credential storage is unavailable.",
             ) from None
 
-    def load_credentials(self) -> GoogleCredentials | None:
+    def load_credentials(self, user_id: str) -> GoogleCredentials | None:
         try:
             with self._lock, closing(self._connect()) as connection:
                 row = connection.execute(
-                    "SELECT payload FROM google_credentials WHERE id = ?",
-                    (self._TOKEN_KEY,),
+                    "SELECT payload FROM google_credentials WHERE user_id = ?",
+                    (user_id,),
                 ).fetchone()
         except sqlite3.Error:
             raise GoogleIntegrationError(
@@ -78,12 +108,12 @@ class EncryptedSQLiteTokenStore:
                 "Stored Google credentials could not be read securely.",
             ) from None
 
-    def delete_credentials(self) -> None:
+    def delete_credentials(self, user_id: str) -> None:
         try:
             with self._lock, closing(self._connect()) as connection, connection:
                 connection.execute(
-                    "DELETE FROM google_credentials WHERE id = ?",
-                    (self._TOKEN_KEY,),
+                    "DELETE FROM google_credentials WHERE user_id = ?",
+                    (user_id,),
                 )
         except sqlite3.Error:
             raise GoogleIntegrationError(
@@ -91,16 +121,24 @@ class EncryptedSQLiteTokenStore:
                 "Google credential storage is unavailable.",
             ) from None
 
-    def store_state(self, state: str, *, expires_at: float) -> None:
+    def store_state(
+        self,
+        user_id: str,
+        state: str,
+        binding_hash: str,
+        *,
+        expires_at: float,
+    ) -> None:
         state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
         try:
             with self._lock, closing(self._connect()) as connection, connection:
                 connection.execute(
                     """
-                    INSERT OR REPLACE INTO oauth_states (state_hash, expires_at)
-                    VALUES (?, ?)
+                    INSERT OR REPLACE INTO oauth_states
+                        (state_hash, user_id, binding_hash, expires_at)
+                    VALUES (?, ?, ?, ?)
                     """,
-                    (state_hash, expires_at),
+                    (state_hash, user_id, binding_hash, expires_at),
                 )
         except sqlite3.Error:
             raise GoogleIntegrationError(
@@ -108,7 +146,13 @@ class EncryptedSQLiteTokenStore:
                 "Google credential storage is unavailable.",
             ) from None
 
-    def consume_state(self, state: str, *, now: float) -> bool:
+    def consume_state(
+        self,
+        state: str,
+        binding_hash: str,
+        *,
+        now: float,
+    ) -> str | None:
         state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
         try:
             with self._lock, closing(self._connect()) as connection, connection:
@@ -116,11 +160,16 @@ class EncryptedSQLiteTokenStore:
                     "DELETE FROM oauth_states WHERE expires_at <= ?",
                     (now,),
                 )
-                cursor = connection.execute(
-                    "DELETE FROM oauth_states WHERE state_hash = ? AND expires_at > ?",
-                    (state_hash, now),
-                )
-                return cursor.rowcount == 1
+                row = connection.execute(
+                    """
+                    DELETE FROM oauth_states
+                    WHERE state_hash = ? AND binding_hash = ?
+                      AND expires_at > ?
+                    RETURNING user_id
+                    """,
+                    (state_hash, binding_hash, now),
+                ).fetchone()
+                return str(row[0]) if row else None
         except sqlite3.Error:
             raise GoogleIntegrationError(
                 "credential_store_error",
@@ -142,7 +191,7 @@ class EncryptedSQLiteTokenStore:
                 connection.execute(
                     """
                     CREATE TABLE IF NOT EXISTS google_credentials (
-                        id TEXT PRIMARY KEY,
+                        user_id TEXT PRIMARY KEY,
                         payload BLOB NOT NULL
                     )
                     """
@@ -151,6 +200,8 @@ class EncryptedSQLiteTokenStore:
                     """
                     CREATE TABLE IF NOT EXISTS oauth_states (
                         state_hash TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        binding_hash TEXT NOT NULL,
                         expires_at REAL NOT NULL
                     )
                     """

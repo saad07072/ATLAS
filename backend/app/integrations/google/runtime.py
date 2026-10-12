@@ -12,11 +12,11 @@ def get_google_oauth_service() -> GoogleOAuthService:
     return GoogleOAuthService(settings)
 
 
-@lru_cache(maxsize=1)
-def get_google_api_client() -> GoogleApiClient:
+def get_google_api_client(user_id: str) -> GoogleApiClient:
     return GoogleApiClient(
         oauth=get_google_oauth_service(),
         settings=settings,
+        user_id=user_id,
     )
 
 

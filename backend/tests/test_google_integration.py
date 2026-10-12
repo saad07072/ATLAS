@@ -1,10 +1,11 @@
 import base64
+import hashlib
 import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
@@ -17,8 +18,10 @@ from backend.app.integrations.google.models import (
 )
 from backend.app.integrations.google.oauth import (
     GOOGLE_SCOPES,
+    GoogleOAuthAuthorization,
     GoogleOAuthService,
 )
+from backend.app.integrations.google.repository import PostgresGoogleCredentialStore
 from backend.app.integrations.google.service import GoogleApiClient
 from backend.app.integrations.google.token_store import EncryptedSQLiteTokenStore
 from backend.app.integrations.google.tools import (
@@ -81,6 +84,7 @@ class GoogleIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
+        self.user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         self.key = Fernet.generate_key().decode("ascii")
         self.store = EncryptedSQLiteTokenStore(
             f"{self.temp_dir.name}\\tokens.sqlite3",
@@ -92,7 +96,6 @@ class GoogleIntegrationTests(unittest.TestCase):
             google_oauth_client_secret="client-secret",
             google_oauth_redirect_uri="http://localhost/callback",
             google_token_encryption_key=self.key,
-            google_token_db_path=f"{self.temp_dir.name}\\tokens.sqlite3",
         )
 
     def make_oauth(self, transport: FakeTransport) -> GoogleOAuthService:
@@ -102,12 +105,19 @@ class GoogleIntegrationTests(unittest.TestCase):
             token_store=self.store,
         )
 
+    def begin_oauth(
+        self,
+        oauth: GoogleOAuthService,
+    ) -> GoogleOAuthAuthorization:
+        return oauth.authorization_request(self.user_id)
+
     def save_credentials(
         self,
         *,
         expires_at: datetime | None = None,
     ) -> None:
         self.store.save_credentials(
+            self.user_id,
             GoogleCredentials(
                 access_token="access-secret",
                 refresh_token="refresh-secret",
@@ -120,23 +130,94 @@ class GoogleIntegrationTests(unittest.TestCase):
     def test_authorization_url_uses_configured_redirect_scopes_and_state(self) -> None:
         oauth = self.make_oauth(FakeTransport())
 
-        url = oauth.authorization_url()
-        query = parse_qs(urlparse(url).query)
+        authorization = self.begin_oauth(oauth)
+        query = parse_qs(urlparse(authorization.url).query)
 
-        self.assertEqual(urlparse(url).netloc, "accounts.google.com")
+        self.assertEqual(
+            urlparse(authorization.url).netloc,
+            "accounts.google.com",
+        )
         self.assertEqual(query["redirect_uri"], [self.settings.google_oauth_redirect_uri])
         self.assertEqual(query["response_type"], ["code"])
         self.assertEqual(set(query["scope"][0].split()), set(GOOGLE_SCOPES))
         self.assertEqual(query["access_type"], ["offline"])
-        self.assertTrue(self.store.consume_state(query["state"][0], now=0))
-        self.assertFalse(self.store.consume_state(query["state"][0], now=0))
+        self.assertEqual(
+            self.store.consume_state(
+                query["state"][0],
+                hashlib.sha256(
+                    authorization.browser_binding.encode("utf-8")
+                ).hexdigest(),
+                now=0,
+            ),
+            self.user_id,
+        )
+        self.assertIsNone(
+            self.store.consume_state(
+                query["state"][0],
+                hashlib.sha256(
+                    authorization.browser_binding.encode("utf-8")
+                ).hexdigest(),
+                now=0,
+            )
+        )
 
     def test_callback_rejects_missing_or_replayed_state(self) -> None:
         oauth = self.make_oauth(FakeTransport())
 
         with self.assertRaises(GoogleIntegrationError) as missing:
-            oauth.handle_callback(code="code", state="not-issued")
+            oauth.handle_callback(
+                code="code",
+                state="not-issued",
+                browser_binding=None,
+            )
         self.assertEqual(missing.exception.code, "invalid_oauth_state")
+
+    def test_expired_state_is_rejected_and_cannot_be_replayed(self) -> None:
+        self.store.store_state(
+            self.user_id,
+            "expired-state",
+            hashlib.sha256(b"binding").hexdigest(),
+            expires_at=10,
+        )
+
+        self.assertIsNone(
+            self.store.consume_state(
+                "expired-state",
+                hashlib.sha256(b"binding").hexdigest(),
+                now=11,
+            )
+        )
+        self.assertIsNone(
+            self.store.consume_state(
+                "expired-state",
+                hashlib.sha256(b"binding").hexdigest(),
+                now=11,
+            )
+        )
+
+    def test_state_from_another_browser_cannot_be_consumed(self) -> None:
+        self.store.store_state(
+            self.user_id,
+            "state-bound-to-first-browser",
+            hashlib.sha256(b"first-browser").hexdigest(),
+            expires_at=100,
+        )
+
+        wrong_binding = self.store.consume_state(
+            "state-bound-to-first-browser",
+            hashlib.sha256(b"second-browser").hexdigest(),
+            now=1,
+        )
+
+        self.assertIsNone(wrong_binding)
+        self.assertEqual(
+            self.store.consume_state(
+                "state-bound-to-first-browser",
+                hashlib.sha256(b"first-browser").hexdigest(),
+                now=1,
+            ),
+            self.user_id,
+        )
 
     def test_callback_exchanges_code_and_stores_encrypted_tokens(self) -> None:
         oauth = self.make_oauth(
@@ -152,12 +233,16 @@ class GoogleIntegrationTests(unittest.TestCase):
                 )
             )
         )
-        auth_url = oauth.authorization_url()
-        state = parse_qs(urlparse(auth_url).query)["state"][0]
+        authorization = self.begin_oauth(oauth)
 
-        oauth.handle_callback(code="authorization-code", state=state)
+        owner = oauth.handle_callback(
+            code="authorization-code",
+            state=authorization.state,
+            browser_binding=authorization.browser_binding,
+        )
 
-        saved = self.store.load_credentials()
+        saved = self.store.load_credentials(owner)
+        self.assertEqual(owner, self.user_id)
         self.assertEqual(saved.access_token, "access-secret")
         self.assertEqual(saved.refresh_token, "refresh-secret")
         with open(self.store.path, "rb") as db_file:
@@ -165,22 +250,160 @@ class GoogleIntegrationTests(unittest.TestCase):
         self.assertNotIn(b"access-secret", persisted_data)
         self.assertNotIn(b"refresh-secret", persisted_data)
 
-    def test_callback_provider_error_is_safe(self) -> None:
-        oauth = self.make_oauth(FakeTransport())
-        state = parse_qs(urlparse(oauth.authorization_url()).query)["state"][0]
+    def test_google_credentials_are_isolated_by_user(self) -> None:
+        self.save_credentials()
+
+        self.assertFalse(
+            self.make_oauth(FakeTransport()).connection_status(
+                "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+            )[1]
+        )
+        with self.assertRaises(GoogleIntegrationError) as error:
+            self.make_oauth(FakeTransport()).access_token(
+                "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+            )
+
+        self.assertEqual(error.exception.code, "not_connected")
+
+    def test_google_api_clients_use_only_their_own_connection(self) -> None:
+        self.save_credentials()
+        other_user_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        self.store.save_credentials(
+            other_user_id,
+            GoogleCredentials(
+                access_token="other-access-token",
+                refresh_token="other-refresh-token",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                scopes=list(GOOGLE_SCOPES),
+            ),
+        )
+        first_transport = FakeTransport(FakeResponse(200, {"items": []}))
+        second_transport = FakeTransport(FakeResponse(200, {"items": []}))
+        first_client = GoogleApiClient(
+            self.make_oauth(FakeTransport()),
+            self.settings,
+            self.user_id,
+            transport=first_transport,
+        )
+        second_client = GoogleApiClient(
+            self.make_oauth(FakeTransport()),
+            self.settings,
+            other_user_id,
+            transport=second_transport,
+        )
+
+        for client in (first_client, second_client):
+            client.calendar_list_events(
+                calendar_id="primary",
+                time_min="2026-10-08T00:00:00Z",
+                time_max="2026-10-09T00:00:00Z",
+                max_results=10,
+            )
+
+        self.assertIn(
+            "access-secret",
+            first_transport.raw_authorization_headers[0],
+        )
+        self.assertIn(
+            "other-access-token",
+            second_transport.raw_authorization_headers[0],
+        )
+        self.assertNotIn(
+            "other-access-token",
+            first_transport.raw_authorization_headers[0],
+        )
+        self.assertNotIn(
+            "access-secret",
+            second_transport.raw_authorization_headers[0],
+        )
+
+    def test_postgres_store_encrypts_tokens_and_sets_verified_owner_claims(self) -> None:
+        credentials = GoogleCredentials(
+            access_token="private-access-token",
+            refresh_token="private-refresh-token",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            scopes=list(GOOGLE_SCOPES),
+        )
+        connection = Mock()
+        connection.__enter__ = Mock(return_value=connection)
+        connection.__exit__ = Mock(return_value=False)
+
+        with patch("psycopg.connect", return_value=connection) as connect:
+            store = PostgresGoogleCredentialStore(
+                "postgresql://database",
+                self.key,
+            )
+            store.save_credentials(self.user_id, credentials)
+
+        statements = connection.execute.call_args_list
+        insert_call = next(
+            call
+            for call in statements
+            if "INSERT INTO public.atlas_google_connections" in call.args[0]
+        )
+        encrypted = insert_call.args[1][1]
+        self.assertNotIn(b"private-access-token", encrypted)
+        self.assertNotIn(b"private-refresh-token", encrypted)
+        self.assertEqual(connect.call_args.kwargs["connect_timeout"], 5)
+        claims_call = next(
+            call for call in statements if "set_config" in call.args[0]
+        )
+        claims = json.loads(claims_call.args[1][1])
+        self.assertEqual(claims["sub"], self.user_id)
+        self.assertEqual(claims["role"], "authenticated")
+        self.assertEqual(claims["atlas_backend"], "true")
+
+    def test_callback_rejects_scopes_outside_the_existing_allow_list(self) -> None:
+        oauth = self.make_oauth(
+            FakeTransport(
+                FakeResponse(
+                    200,
+                    {
+                        "access_token": "access-secret",
+                        "refresh_token": "refresh-secret",
+                        "expires_in": 3600,
+                        "scope": "https://www.googleapis.com/auth/drive",
+                    },
+                )
+            )
+        )
+        authorization = self.begin_oauth(oauth)
 
         with self.assertRaises(GoogleIntegrationError) as error:
-            oauth.handle_callback(code=None, state=state, provider_error="access_denied")
+            oauth.handle_callback(
+                code="authorization-code",
+                state=authorization.state,
+                browser_binding=authorization.browser_binding,
+            )
+
+        self.assertEqual(error.exception.code, "insufficient_scopes")
+        self.assertIsNone(self.store.load_credentials(self.user_id))
+
+    def test_callback_provider_error_is_safe(self) -> None:
+        oauth = self.make_oauth(FakeTransport())
+        authorization = self.begin_oauth(oauth)
+
+        with self.assertRaises(GoogleIntegrationError) as error:
+            oauth.handle_callback(
+                code=None,
+                state=authorization.state,
+                browser_binding=authorization.browser_binding,
+                provider_error="access_denied",
+            )
 
         self.assertEqual(error.exception.code, "authorization_denied")
         self.assertNotIn("access_denied", error.exception.safe_message)
 
     def test_callback_exchange_failure_does_not_leak_client_secret(self) -> None:
         oauth = self.make_oauth(FakeTransport(FakeResponse(400, {"error": "invalid_grant"})))
-        state = parse_qs(urlparse(oauth.authorization_url()).query)["state"][0]
+        authorization = self.begin_oauth(oauth)
 
         with self.assertRaises(GoogleIntegrationError) as error:
-            oauth.handle_callback(code="bad-code", state=state)
+            oauth.handle_callback(
+                code="bad-code",
+                state=authorization.state,
+                browser_binding=authorization.browser_binding,
+            )
 
         self.assertNotIn("client-secret", str(error.exception))
         self.assertNotIn("invalid_grant", error.exception.safe_message)
@@ -198,14 +421,18 @@ class GoogleIntegrationTests(unittest.TestCase):
             )
         )
 
-        token = self.make_oauth(transport).access_token()
+        token = self.make_oauth(transport).access_token(self.user_id)
 
         self.assertEqual(token, "new-access-secret")
-        self.assertEqual(self.store.load_credentials().refresh_token, "refresh-secret")
+        self.assertEqual(
+            self.store.load_credentials(self.user_id).refresh_token,
+            "refresh-secret",
+        )
         self.assertNotIn("refresh-secret", json.dumps(transport.calls[0][2]))
 
     def test_missing_refresh_token_returns_safe_reauthentication_error(self) -> None:
         self.store.save_credentials(
+            self.user_id,
             GoogleCredentials(
                 access_token="expired",
                 expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
@@ -213,9 +440,41 @@ class GoogleIntegrationTests(unittest.TestCase):
         )
 
         with self.assertRaises(GoogleIntegrationError) as error:
-            self.make_oauth(FakeTransport()).access_token()
+            self.make_oauth(FakeTransport()).access_token(self.user_id)
 
         self.assertEqual(error.exception.code, "reauthentication_required")
+
+    def test_revoked_refresh_token_is_removed_and_requires_reauthorization(self) -> None:
+        self.save_credentials(expires_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+        transport = FakeTransport(FakeResponse(400, {"error": "invalid_grant"}))
+
+        with self.assertRaises(GoogleIntegrationError) as error:
+            self.make_oauth(transport).access_token(self.user_id)
+
+        self.assertEqual(error.exception.code, "reauthentication_required")
+        self.assertIsNone(self.store.load_credentials(self.user_id))
+        self.assertNotIn("refresh-secret", json.dumps(transport.calls[0][2]))
+
+    def test_disconnect_removes_only_the_owner_and_revokes_provider_token(self) -> None:
+        self.save_credentials()
+        other_user_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        self.store.save_credentials(
+            other_user_id,
+            GoogleCredentials(
+                access_token="other-access-token",
+                refresh_token="other-refresh-token",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                scopes=list(GOOGLE_SCOPES),
+            ),
+        )
+        transport = FakeTransport(FakeResponse(200, {}))
+
+        self.make_oauth(transport).disconnect(self.user_id)
+
+        self.assertIsNone(self.store.load_credentials(self.user_id))
+        self.assertIsNotNone(self.store.load_credentials(other_user_id))
+        self.assertEqual(transport.calls[0][1], "https://oauth2.googleapis.com/revoke")
+        self.assertNotIn("refresh-secret", str(transport.calls[0][2]))
 
     def test_invalid_encryption_key_fails_safely(self) -> None:
         with self.assertRaises(GoogleIntegrationError) as error:
@@ -247,6 +506,7 @@ class GoogleIntegrationTests(unittest.TestCase):
         api = GoogleApiClient(
             self.make_oauth(FakeTransport()),
             self.settings,
+            self.user_id,
             transport=transport,
         )
 
@@ -261,15 +521,7 @@ class GoogleIntegrationTests(unittest.TestCase):
         self.assertTrue(transport.authorization_is_bearer[0])
         self.assertEqual(
             transport.raw_authorization_headers[0],
-            f"Bearer {self.store.load_credentials().access_token}",
-        )
-        self.assertEqual(
-            transport.authorization_headers[0],
-            "Bearer access-secret",
-        )
-        self.assertEqual(
             transport.calls[0][2]["Authorization"],
-            "Bearer access-secret",
         )
         self.assertIn("calendar/v3", transport.calls[0][1])
 
@@ -278,6 +530,7 @@ class GoogleIntegrationTests(unittest.TestCase):
         api = GoogleApiClient(
             self.make_oauth(FakeTransport()),
             self.settings,
+            self.user_id,
             transport=FakeTransport(FakeResponse(403, {"error": "private detail"})),
         )
 
@@ -289,7 +542,6 @@ class GoogleIntegrationTests(unittest.TestCase):
 
     def test_401_refreshes_token_and_retries_once(self) -> None:
         self.save_credentials()
-        original_token = self.store.load_credentials().access_token
         refresh_transport = FakeTransport(
             FakeResponse(
                 200,
@@ -299,33 +551,25 @@ class GoogleIntegrationTests(unittest.TestCase):
                 },
             )
         )
-        oauth = self.make_oauth(refresh_transport)
         api_transport = FakeTransport(
             FakeResponse(401, {}),
             FakeResponse(200, {"id": "event", "start": {}, "end": {}}),
         )
-        api = GoogleApiClient(oauth, self.settings, transport=api_transport)
+        api = GoogleApiClient(
+            self.make_oauth(refresh_transport),
+            self.settings,
+            self.user_id,
+            transport=api_transport,
+        )
 
         event = api.calendar_get_event(calendar_id="primary", event_id="event")
 
         self.assertEqual(event.id, "event")
         self.assertEqual(len(api_transport.calls), 2)
-        self.assertEqual(api_transport.authorization_is_bearer, [True, True])
-        self.assertEqual(
-            api_transport.raw_authorization_headers,
-            [
-                f"Bearer {original_token}",
-                f"Bearer {self.store.load_credentials().access_token}",
-            ],
-        )
-        self.assertEqual(
-            api_transport.authorization_headers,
-            ["Bearer access-secret", "Bearer refreshed-token"],
-        )
-        self.assertEqual(
-            api_transport.calls[1][2]["Authorization"],
-            "Bearer refreshed-token",
-        )
+        self.assertTrue(api_transport.authorization_is_bearer[0])
+        self.assertTrue(api_transport.authorization_is_bearer[1])
+        self.assertTrue(api_transport.raw_authorization_headers[0].endswith("access-secret"))
+        self.assertTrue(api_transport.raw_authorization_headers[1].endswith("refreshed-token"))
 
     def test_calendar_tools_validate_inputs_and_normalize_operations(self) -> None:
         self.save_credentials()
@@ -366,7 +610,12 @@ class GoogleIntegrationTests(unittest.TestCase):
             ),
             FakeResponse(204, b""),
         )
-        api = GoogleApiClient(self.make_oauth(FakeTransport()), self.settings, transport=transport)
+        api = GoogleApiClient(
+            self.make_oauth(FakeTransport()),
+            self.settings,
+            self.user_id,
+            transport=transport,
+        )
         events = api.calendar_list_events(
             calendar_id="primary",
             time_min="2026-10-08T09:00:00Z",
@@ -457,6 +706,7 @@ class GoogleIntegrationTests(unittest.TestCase):
         api = GoogleApiClient(
             self.make_oauth(FakeTransport()),
             self.settings,
+            self.user_id,
             transport=transport,
         )
 
@@ -543,6 +793,7 @@ class GoogleIntegrationTests(unittest.TestCase):
         api = GoogleApiClient(
             self.make_oauth(FakeTransport()),
             self.settings,
+            self.user_id,
             transport=FakeTransport(
                 FakeResponse(403, {"error": "refresh-secret access-secret"})
             ),

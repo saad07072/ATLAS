@@ -37,11 +37,13 @@ class GoogleApiClient:
         self,
         oauth: GoogleOAuthService,
         settings: Settings,
+        user_id: str,
         *,
         transport: HttpTransport | None = None,
     ) -> None:
         self.oauth = oauth
         self.settings = settings
+        self.user_id = user_id
         self.transport = transport or UrllibTransport()
 
     def calendar_list_events(
@@ -286,10 +288,10 @@ class GoogleApiClient:
             if body is not None
             else None
         )
-        token = self.oauth.access_token()
+        token = self.oauth.access_token(self.user_id)
         response = self._send(method, url, request_body, token)
         if response.status_code == 401:
-            token = self.oauth.refresh_access_token().access_token
+            token = self.oauth.refresh_access_token(self.user_id).access_token
             response = self._send(method, url, request_body, token)
         if response.status_code < 200 or response.status_code >= 300:
             raise normalize_google_status(response.status_code)

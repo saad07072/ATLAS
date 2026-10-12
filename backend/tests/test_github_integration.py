@@ -654,7 +654,7 @@ class GitHubIntegrationTests(unittest.TestCase):
         )
         github.create_issue.assert_not_called()
 
-    def test_issue_tool_executes_only_when_permission_policy_allows(self) -> None:
+    def test_issue_tool_cannot_bypass_high_risk_confirmation(self) -> None:
         github = Mock()
         created = GitHubIssueCreated(
             number=9,
@@ -697,14 +697,13 @@ class GitHubIntegrationTests(unittest.TestCase):
             )
         )
 
-        self.assertTrue(result.success)
-        self.assertEqual(result.output["number"], 9)
-        github.create_issue.assert_called_once_with(
-            owner="owner",
-            repo="atlas",
-            title="Issue",
-            body="Details",
+        self.assertFalse(result.success)
+        self.assertEqual(result.error.code, "confirmation_required")
+        self.assertEqual(
+            result.authorization.decision,
+            PermissionDecision.CONFIRMATION_REQUIRED,
         )
+        github.create_issue.assert_not_called()
 
     def test_llm_arguments_cannot_supply_confirmation_or_api_route(self) -> None:
         github = Mock()

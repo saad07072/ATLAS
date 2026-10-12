@@ -198,7 +198,7 @@ class PermissionEngineTests(unittest.TestCase):
             PermissionDecision.ALLOW,
         )
 
-    def test_explicit_trusted_policy_can_allow_high_risk_without_confirmation(self) -> None:
+    def test_high_risk_confirmation_cannot_be_disabled_by_policy(self) -> None:
         trusted_policy = PermissionPolicy(
             {
                 ("test.high", PermissionId.CALENDAR_CREATE): PermissionRule(
@@ -218,7 +218,20 @@ class PermissionEngineTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.decision, PermissionDecision.ALLOW)
+        self.assertEqual(
+            result.decision,
+            PermissionDecision.CONFIRMATION_REQUIRED,
+        )
+        confirmed = trusted_policy.evaluate(
+            make_context(
+                tool_name="test.high",
+                permission=PermissionId.CALENDAR_CREATE.value,
+                risk_level=RiskLevel.HIGH.value,
+                permission_required=True,
+                confirmation=ConfirmationState.CONFIRMED,
+            )
+        )
+        self.assertEqual(confirmed.decision, PermissionDecision.ALLOW)
 
     def test_permission_engine_is_the_tool_execution_boundary(self) -> None:
         registry = ToolRegistry()

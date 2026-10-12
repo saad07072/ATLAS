@@ -2,8 +2,10 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from backend.app.api.health import router as health_router
 from backend.app.api.v1.router import router as api_v1_router
@@ -40,6 +42,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def redact_google_oauth_callback_query(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+    response = await call_next(request)
+    if request.url.path == "/api/v1/google/oauth/callback":
+        request.scope["query_string"] = b""
+    return response
+
 
 register_exception_handlers(app)
 app.include_router(health_router)
