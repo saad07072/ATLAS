@@ -105,9 +105,8 @@ class PermissionPolicy:
             )
 
         requires_confirmation = (
-            rule.confirmation_required
-            if rule.confirmation_required is not None
-            else risk_level in {RiskLevel.HIGH, RiskLevel.CRITICAL}
+            risk_level in {RiskLevel.HIGH, RiskLevel.CRITICAL}
+            or rule.confirmation_required is True
         )
         if risk_level == RiskLevel.CRITICAL or (
             requires_confirmation

@@ -25,6 +25,32 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationListResponse {
+  conversations: ConversationSummary[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface ConversationDetailResponse {
+  conversation: ConversationSummary;
+  messages: Array<{
+    id: string;
+    conversation_id: string;
+    role: ChatRole;
+    content: string;
+    created_at: string;
+  }>;
+  has_more: boolean;
+}
+
 export interface ActivityItem {
   id: string;
   timestamp: string;

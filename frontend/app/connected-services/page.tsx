@@ -4,8 +4,10 @@ import type { JSX } from "react";
 import { useEffect, useState } from "react";
 
 import {
+  disconnectGoogleConnection,
   getGitHubConnectionStatus,
   getGoogleConnectionStatus,
+  getGoogleOAuthStartUrl,
 } from "@/services/api";
 import type {
   GitHubConnectionStatus,
@@ -37,6 +39,8 @@ const services: ServiceStatus[] = [
 export default function ConnectedServicesPage(): JSX.Element {
   const [googleStatus, setGoogleStatus] = useState<GoogleConnectionStatus | null>(null);
   const [googleStatusUnavailable, setGoogleStatusUnavailable] = useState(false);
+  const [googleActionPending, setGoogleActionPending] = useState(false);
+  const [googleActionError, setGoogleActionError] = useState<string | null>(null);
   const [githubStatus, setGithubStatus] = useState<GitHubConnectionStatus | null>(null);
   const [githubStatusUnavailable, setGithubStatusUnavailable] = useState(false);
 
@@ -75,6 +79,42 @@ export default function ConnectedServicesPage(): JSX.Element {
       active = false;
     };
   }, []);
+
+  async function connectGoogle(): Promise<void> {
+    setGoogleActionPending(true);
+    setGoogleActionError(null);
+    try {
+      const authorizationUrl = await getGoogleOAuthStartUrl();
+      window.location.assign(authorizationUrl);
+    } catch (error) {
+      setGoogleActionError(
+        error instanceof Error ? error.message : "Google could not be connected.",
+      );
+      setGoogleActionPending(false);
+    }
+  }
+
+  async function disconnectGoogle(): Promise<void> {
+    if (!window.confirm("Disconnect this Google account from ATLAS?")) {
+      return;
+    }
+    setGoogleActionPending(true);
+    setGoogleActionError(null);
+    try {
+      await disconnectGoogleConnection();
+      setGoogleStatus((current) =>
+        current ? { ...current, connected: false } : current,
+      );
+    } catch (error) {
+      setGoogleActionError(
+        error instanceof Error
+          ? error.message
+          : "Google could not be disconnected.",
+      );
+    } finally {
+      setGoogleActionPending(false);
+    }
+  }
 
   return (
     <div className="page-shell">
@@ -132,8 +172,30 @@ export default function ConnectedServicesPage(): JSX.Element {
                 </p>
               )}
               {service.id === "google-calendar" ? (
-                <button type="button" className="ghost-button" disabled>
-                  {isConnected ? "Google connected" : "Per-user connection unavailable"}
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={
+                    googleActionPending ||
+                    googleStatus === null ||
+                    googleStatusUnavailable ||
+                    !googleStatus.configured
+                  }
+                  onClick={() => {
+                    if (isConnected) {
+                      void disconnectGoogle();
+                    } else {
+                      void connectGoogle();
+                    }
+                  }}
+                >
+                  {googleActionPending
+                    ? "Working..."
+                    : isConnected
+                      ? "Disconnect Google"
+                      : googleStatus?.configured
+                        ? "Connect Google"
+                        : "Google is not configured"}
                 </button>
               ) : (
                 <button type="button" className="ghost-button" disabled>
@@ -145,6 +207,15 @@ export default function ConnectedServicesPage(): JSX.Element {
                       ? "GitHub App configured"
                       : "Per-user connection unavailable"}
                 </button>
+              )}
+              {service.id === "google-calendar" && isConnected && (
+                <p>
+                  Account connected. Google actions remain disabled until
+                  user-bound tool authorization is available.
+                </p>
+              )}
+              {service.id === "google-calendar" && googleActionError && (
+                <p role="alert">{googleActionError}</p>
               )}
             </article>
           );

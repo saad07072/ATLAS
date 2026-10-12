@@ -1,6 +1,9 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from backend.app.memory.models import contains_secret
 
 
 ChatIntent = Literal[
@@ -17,7 +20,7 @@ class ChatHistoryMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: ChatRole
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(min_length=1, max_length=8000)
 
     @field_validator("content")
     @classmethod
@@ -25,6 +28,8 @@ class ChatHistoryMessage(BaseModel):
         content = content.strip()
         if not content:
             raise ValueError("Message content must not be blank.")
+        if contains_secret(content):
+            raise ValueError("Conversation history must not contain secrets.")
         return content
 
 
@@ -33,6 +38,7 @@ class ChatRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=4000)
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=12)
+    conversation_id: UUID | None = None
 
     @field_validator("message")
     @classmethod
@@ -56,3 +62,4 @@ class ChatResponse(BaseModel):
     intent: ChatIntent
     message: str = Field(min_length=1, max_length=8000)
     requires_clarification: bool = False
+    conversation_id: UUID | None = None

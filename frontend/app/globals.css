@@ -726,6 +726,165 @@ img {
   margin-top: 24px;
 }
 
+.conversation-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.conversation-sidebar {
+  min-width: 0;
+  max-height: 760px;
+  overflow-y: auto;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.conversation-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.conversation-sidebar-header h2 {
+  margin: 4px 0 0;
+  font-size: 1.1rem;
+}
+
+.conversation-new-button {
+  flex-shrink: 0;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.conversation-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-list-item {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.conversation-list-item.selected {
+  background: var(--primary-soft);
+  border-color: rgba(31, 111, 235, 0.2);
+}
+
+.conversation-select {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.conversation-select span {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-select time {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.conversation-item-actions {
+  display: flex;
+  gap: 12px;
+  padding: 4px;
+}
+
+.conversation-item-actions button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.conversation-item-actions button:hover {
+  color: var(--primary);
+}
+
+.conversation-item-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.conversation-rename-form {
+  display: grid;
+  gap: 8px;
+}
+
+.conversation-rename-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.conversation-list-state {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.conversation-list-state p {
+  margin: 0;
+}
+
+.conversation-list-state .activity-indicator {
+  white-space: normal;
+}
+
+.conversation-load-more {
+  width: 100%;
+  margin-top: 12px;
+  padding: 0.6rem;
+  font-size: 0.8rem;
+}
+
+.chat-panel {
+  min-width: 0;
+}
+
+.chat-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-history-actions p {
+  width: 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -744,6 +903,14 @@ img {
 
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .conversation-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .conversation-sidebar {
+    max-height: 300px;
   }
 }
 
@@ -773,6 +940,10 @@ img {
 
   .chat-input-row {
     grid-template-columns: 1fr;
+  }
+
+  .conversation-sidebar-header {
+    align-items: flex-start;
   }
 
   .stats-grid {

@@ -52,6 +52,12 @@ account. Queries also explicitly scope every operation by the verified owner.
 If role switching, RLS context setup, or the database operation fails, the
 request fails safely instead of bypassing row policies.
 
+Conversation policies additionally require the backend-only `atlas_backend`
+transaction claim. The conversation repository sets it only after the API has
+validated the Supabase access token, so browser clients cannot write messages
+or impersonate assistant responses directly. Conversation ownership remains
+scoped to the authenticated token subject.
+
 Use a trusted server-side Supabase PostgreSQL connection string that can assume
 the `authenticated` role. Never use the Supabase `service_role` API key as a
 database substitute and never expose database credentials to the browser.
@@ -59,22 +65,33 @@ Apply the memory migration following [the memory setup guide](./memory.md).
 
 ## Integration ownership
 
-Google credentials are currently stored in one encrypted application-wide
-SQLite record, and GitHub uses one application-wide App installation. Neither
-credential source is scoped to a Supabase user. Until per-user ownership and
-authorization are implemented:
+Google OAuth state is generated for an authenticated Supabase subject, stored
+as a hash, expires after ten minutes, and is consumed atomically once. A
+state-specific, HttpOnly, SameSite=Lax cookie binds the callback to the browser
+that initiated the flow. The callback resolves the owner only from that state
+record; it never accepts a user ID from callback parameters. Google credentials are encrypted with
+`GOOGLE_TOKEN_ENCRYPTION_KEY` and stored per user in PostgreSQL. Status,
+refresh, and disconnect operations use the verified subject and the Google
+connection RLS policies. OAuth start, callback, status, and disconnect never
+return credentials. The Google API client is constructed for one user and
+loads only that user's tokens.
 
-- `GET /api/v1/google/oauth/start` and
-  `GET /api/v1/google/oauth/callback` fail with 503 and do not create or save
-  credentials.
-- Google and GitHub status endpoints report configuration only;
-  `connected` and `actions_enabled` are false because no user-owned connection
-  is available.
-- The standard Google and GitHub tool executors have no registered integration
-  actions, so chat or other callers cannot execute operations with shared
-  credentials.
+Google tool actions remain disabled in the standard runtime. There is not yet
+an authenticated, user-bound tool execution lifecycle in chat, so connecting
+an account alone does not authorize ATLAS to read or change its data. The
+status route therefore reports `actions_enabled: false`.
 
-Do not enable these actions or restore the shared OAuth callback until
-credentials and OAuth state are bound to the authenticated owner and every
-operation verifies that ownership. Google/GitHub credentials are not exposed
-by the status endpoints.
+GitHub uses a configured App and installation credential, not a signed-in
+user's GitHub identity. An installation token grants access to the repositories
+selected for that installation and must not be described as the ATLAS user's
+own authorization. No GitHub user-consent/identity link or per-user
+repository-authorization policy exists yet. GitHub integration actions and
+the standard GitHub tool executor therefore remain disabled; status only
+reports App configuration and always returns `connected: false` and
+`actions_enabled: false`.
+
+Review and manually apply
+[`20261013000000_google_user_connections.sql`](../supabase/migrations/20261013000000_google_user_connections.sql)
+to the intended Supabase project before enabling Google connection management.
+See the [integration setup guide](./integrations.md) for backend OAuth
+configuration and the remaining action-authorization limitations.

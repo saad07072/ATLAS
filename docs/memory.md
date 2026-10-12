@@ -1,7 +1,9 @@
 # Persistent memory setup
 
 ATLAS stores only explicitly submitted memories in Supabase PostgreSQL. The
-memory service does not save conversation messages or unreviewed model output.
+memory service does not copy conversation messages or unreviewed model output
+into long-term memory. Persistent chat history is stored separately; see the
+[conversation setup guide](./conversations.md).
 Each row belongs to a Supabase Auth user. The backend validates the access-token
 subject, scopes each SQL operation to that owner, and applies the authenticated
 role/claims in the database transaction so the row-level security policies

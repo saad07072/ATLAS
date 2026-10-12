@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     log_level: LogLevel = "INFO"
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            val_lower = value.strip().lower()
+            if val_lower in {"true", "1", "yes", "on", "debug", "dev", "development"}:
+                return True
+            if val_lower in {"false", "0", "no", "off", "release", "prod", "production"}:
+                return False
+        return bool(value)
 
     llm_provider: str = "gemini"
     gemini_api_key: str | None = None
@@ -27,7 +38,6 @@ class Settings(BaseSettings):
     google_oauth_client_secret: str | None = None
     google_oauth_redirect_uri: str | None = None
     google_token_encryption_key: str | None = None
-    google_token_db_path: str = "backend/data/google_tokens.sqlite3"
     google_api_timeout_seconds: float = 15.0
 
     github_app_id: str | None = None
