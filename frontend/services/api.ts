@@ -174,3 +174,88 @@ export async function deleteMemory(memoryId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+// Workflows API
+export async function createWorkflow(
+  definition: import("@/types").WorkflowDefinition,
+): Promise<import("@/types").WorkflowRecord> {
+  return request<import("@/types").WorkflowRecord>("/api/v1/workflows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(definition),
+  });
+}
+
+export async function listWorkflows(
+  limit = 50,
+  offset = 0,
+  status?: string,
+): Promise<import("@/types").WorkflowListResponse> {
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    ...(status ? { status } : {}),
+  });
+  return request<import("@/types").WorkflowListResponse>(
+    `/api/v1/workflows?${query.toString()}`,
+  );
+}
+
+export async function getWorkflow(
+  workflowId: string,
+): Promise<import("@/types").WorkflowRecord> {
+  return request<import("@/types").WorkflowRecord>(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}`,
+  );
+}
+
+export async function startWorkflow(
+  workflowId: string,
+): Promise<import("@/types").WorkflowRecord> {
+  return request<import("@/types").WorkflowRecord>(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/start`,
+    { method: "POST" },
+  );
+}
+
+export async function resumeWorkflow(
+  workflowId: string,
+): Promise<import("@/types").WorkflowRecord> {
+  return request<import("@/types").WorkflowRecord>(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/resume`,
+    { method: "POST" },
+  );
+}
+
+export async function cancelWorkflow(
+  workflowId: string,
+): Promise<import("@/types").WorkflowRecord> {
+  return request<import("@/types").WorkflowRecord>(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/cancel`,
+    { method: "POST" },
+  );
+}
+
+export async function confirmWorkflowStep(
+  workflowId: string,
+  stepId: string,
+  decision: "confirm" | "reject",
+  reason?: string,
+): Promise<import("@/types").WorkflowRecord> {
+  return request<import("@/types").WorkflowRecord>(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/steps/${encodeURIComponent(stepId)}/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, reason }),
+    },
+  );
+}
+
+export async function getWorkflowEvents(
+  workflowId: string,
+): Promise<import("@/types").WorkflowEventRecord[]> {
+  return request<import("@/types").WorkflowEventRecord[]>(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/events`,
+  );
+}

@@ -38,7 +38,11 @@ class ToolExecutionService:
         self.registry = registry
         self.permission_boundary = permission_boundary
 
-    def execute(self, request: ToolExecutionRequest) -> ToolResult:
+    def execute(
+        self,
+        request: ToolExecutionRequest,
+        context: PermissionContext | None = None,
+    ) -> ToolResult:
         started = perf_counter()
         tool_name = request.name
         tool = None
@@ -47,17 +51,18 @@ class ToolExecutionService:
             tool = self.registry.get(request.name)
             validated_arguments = tool.validate_input(request.arguments)
             permission = str(tool.permission_id) if tool.permission_id else None
-            context = (
-                PermissionContext(
-                    requested_action=permission,
-                    tool_name=tool.name,
-                    permission=permission,
-                    risk_level=str(tool.risk_level),
-                    permission_required=tool.permission_required,
+            if context is None:
+                context = (
+                    PermissionContext(
+                        requested_action=permission,
+                        tool_name=tool.name,
+                        permission=permission,
+                        risk_level=str(tool.risk_level),
+                        permission_required=tool.permission_required,
+                    )
+                    if permission
+                    else None
                 )
-                if permission
-                else None
-            )
             evaluated_authorization = self.permission_boundary.evaluate(context)
             if not self._authorization_matches_context(evaluated_authorization, context):
                 authorization = self._invalid_authorization(request.name)

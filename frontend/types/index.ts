@@ -100,3 +100,4 @@ export interface SettingGroup {
 }
 
 export * from "./speech";
+export * from "./workflow";
