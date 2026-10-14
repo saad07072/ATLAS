@@ -1133,3 +1133,44 @@ img {
     grid-template-columns: 1fr;
   }
 }
+
+/* Workflow Engine Styles */
+.status-badge.in-progress {
+  background: rgba(31, 111, 235, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(31, 111, 235, 0.25);
+}
+
+.status-badge.waiting {
+  background: rgba(230, 162, 60, 0.15);
+  color: #c97d10;
+  border: 1px solid rgba(230, 162, 60, 0.3);
+}
+
+.status-badge.warning {
+  background: rgba(230, 162, 60, 0.15);
+  color: #c97d10;
+  border: 1px solid rgba(230, 162, 60, 0.3);
+}
+
+.workflow-item-card:hover {
+  background: var(--panel-alt);
+}
+
+.workflow-item-card.active-item {
+  background: var(--panel-alt);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.confirmation-card pre {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (max-width: 860px) {
+  .workflow-layout {
+    grid-template-columns: 1fr !important;
+  }
+}

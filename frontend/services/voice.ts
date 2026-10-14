@@ -91,7 +91,7 @@ export function cleanTextForSpeech(text: string): string {
       .replace(/(\*\*|__)(.*?)\1/g, "$2")
       .replace(/(\*|_)(.*?)\1/g, "$2")
       // Remove blockquotes (> quote -> quote)
-      .replace(/^\s*>\s+/gm, "")
+      .replace(/(?:^|\s)>\s+/gm, " ")
       // Remove list markers (- item -> item)
       .replace(/^\s*[-*+]\s+/gm, "")
       .replace(/^\s*\d+\.\s+/gm, "")

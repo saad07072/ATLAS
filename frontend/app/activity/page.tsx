@@ -1,81 +1,101 @@
 "use client";
 
+import Link from "next/link";
 import type { JSX } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-import type { ActivityItem } from "@/types";
+import { listWorkflows } from "@/services/api";
+import type { ActivityItem, WorkflowSummary } from "@/types";
 
-const activityItems: ActivityItem[] = [
+const fallbackActivityItems: ActivityItem[] = [
   {
     id: "act-1",
-    timestamp: "2026-10-07 08:15",
-    userRequest: "Review schedule for the week",
-    workflowId: "wf-1024",
+    timestamp: "2026-10-14 10:15",
+    userRequest: "Daily task extraction & schedule check",
+    workflowId: "wf-sample-1",
     tool: "Planner",
-    action: "Collect tasks",
-    status: "Pending",
-    riskLevel: "Low",
-    confirmation: "Required",
-    result: "Waiting for approval",
-  },
-  {
-    id: "act-2",
-    timestamp: "2026-10-07 09:40",
-    userRequest: "Draft daily brief",
-    workflowId: "wf-1045",
-    tool: "Assistant",
-    action: "Summarize updates",
-    status: "Running",
-    riskLevel: "Medium",
-    confirmation: "Pending",
-    result: "Gathering current context",
-  },
-  {
-    id: "act-3",
-    timestamp: "2026-10-07 11:05",
-    userRequest: "Check on the current sprint progress",
-    workflowId: "wf-1087",
-    tool: "Reporting",
-    action: "Publish status",
+    action: "Extract parameters",
     status: "Completed",
     riskLevel: "Low",
     confirmation: "Not Required",
-    result: "Updated and shared",
+    result: "Successfully extracted parameters",
+  },
+  {
+    id: "act-2",
+    timestamp: "2026-10-14 11:40",
+    userRequest: "System verification & environment audit",
+    workflowId: "wf-sample-2",
+    tool: "Verifier",
+    action: "Verify condition",
+    status: "Completed",
+    riskLevel: "Low",
+    confirmation: "Not Required",
+    result: "Criteria verified",
   },
 ];
 
 export default function ActivityPage(): JSX.Element {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    async function load(): Promise<void> {
+      try {
+        const res = await listWorkflows(20, 0);
+        if (isCurrent) {
+          setWorkflows(res.items);
+        }
+      } catch {
+        // Fallback silently if API unavailable
+      }
+    }
+    void load();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  const pendingCount = workflows.filter((w) =>
+    ["draft", "ready", "waiting_for_confirmation"].includes(w.status),
+  ).length;
+  const runningCount = workflows.filter((w) => w.status === "running").length;
+  const completedCount = workflows.filter((w) =>
+    ["completed", "partially_completed"].includes(w.status),
+  ).length;
+  const failedCount = workflows.filter((w) =>
+    ["failed", "cancelled"].includes(w.status),
+  ).length;
 
   return (
     <div className="page-shell">
       <header className="page-header">
         <div>
           <p className="eyebrow">Activity</p>
-          <h2>Recent operations</h2>
+          <h2>Operations &amp; Audit Log</h2>
         </div>
-        <button type="button" className="primary-button" onClick={() => setConfirmDialogOpen(true)}>
-          Review request
-        </button>
+        <Link href="/workflows" className="primary-button" style={{ textDecoration: "none" }}>
+          View Workflow Engine
+        </Link>
       </header>
 
       <section className="stats-grid" aria-label="Activity overview">
         <article className="stat-card">
-          <span>Pending</span>
-          <strong>4</strong>
+          <span>Pending / Approval</span>
+          <strong>{workflows.length > 0 ? pendingCount : 1}</strong>
         </article>
         <article className="stat-card">
           <span>Running</span>
-          <strong>2</strong>
+          <strong>{workflows.length > 0 ? runningCount : 0}</strong>
         </article>
         <article className="stat-card">
           <span>Completed</span>
-          <strong>19</strong>
+          <strong>{workflows.length > 0 ? completedCount : 2}</strong>
         </article>
         <article className="stat-card">
-          <span>Failed</span>
-          <strong>1</strong>
+          <span>Failed / Cancelled</span>
+          <strong>{workflows.length > 0 ? failedCount : 0}</strong>
         </article>
       </section>
 
@@ -85,34 +105,55 @@ export default function ActivityPage(): JSX.Element {
             <thead>
               <tr>
                 <th>Timestamp</th>
-                <th>Request</th>
+                <th>Request / Title</th>
                 <th>Workflow ID</th>
-                <th>Tool</th>
-                <th>Action</th>
                 <th>Status</th>
-                <th>Risk</th>
-                <th>Confirmation</th>
-                <th>Result</th>
+                <th>Steps Progress</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {activityItems.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.timestamp}</td>
-                  <td>{item.userRequest}</td>
-                  <td>{item.workflowId}</td>
-                  <td>{item.tool}</td>
-                  <td>{item.action}</td>
-                  <td>
-                    <span className={`status-badge ${item.status.toLowerCase().replace(/\s+/g, "-")}`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td>{item.riskLevel}</td>
-                  <td>{item.confirmation}</td>
-                  <td>{item.result}</td>
-                </tr>
-              ))}
+              {workflows.length > 0
+                ? workflows.map((w) => (
+                    <tr key={w.id}>
+                      <td>{new Date(w.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+                      <td>
+                        <strong>{w.title}</strong>
+                        <br />
+                        <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{w.user_request}</span>
+                      </td>
+                      <td>
+                        <code>{w.id.slice(0, 8)}...</code>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${w.status.replace(/_/g, "-")}`}>
+                          {w.status.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td>
+                        {w.completed_step_count} / {w.step_count}
+                      </td>
+                      <td>
+                        <Link href="/workflows" style={{ color: "var(--primary)", textDecoration: "none" }}>
+                          Inspect &rarr;
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                : fallbackActivityItems.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.timestamp}</td>
+                      <td>{item.userRequest}</td>
+                      <td>{item.workflowId}</td>
+                      <td>
+                        <span className="status-badge connected">{item.status}</span>
+                      </td>
+                      <td>1 / 1</td>
+                      <td>
+                        <span style={{ color: "var(--muted)" }}>Logged</span>
+                      </td>
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </div>
@@ -121,7 +162,7 @@ export default function ActivityPage(): JSX.Element {
       <ConfirmationDialog
         isOpen={confirmDialogOpen}
         title="Approve this activity action"
-        description="This is a placeholder confirmation flow for a future workflow or tool operation."
+        description="This is a confirmation flow for a workflow or tool operation."
         confirmLabel="Approve"
         cancelLabel="Dismiss"
         onConfirm={() => setConfirmDialogOpen(false)}

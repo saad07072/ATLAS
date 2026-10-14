@@ -11,6 +11,7 @@ import { getHealth } from "@/services/api";
 
 const navigation = [
   { href: "/", label: "Home" },
+  { href: "/workflows", label: "Workflows" },
   { href: "/activity", label: "Activity" },
   { href: "/memory", label: "Memory" },
   { href: "/connected-services", label: "Connected Services" },
