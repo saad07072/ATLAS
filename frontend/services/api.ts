@@ -259,3 +259,20 @@ export async function getWorkflowEvents(
     `/api/v1/workflows/${encodeURIComponent(workflowId)}/events`,
   );
 }
+
+export async function getUserEvents(
+  limit = 50,
+  offset = 0,
+): Promise<import("@/types").WorkflowEventListResponse> {
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return request<import("@/types").WorkflowEventListResponse>(
+    `/api/v1/workflows/events?${query.toString()}`,
+  );
+}
+
+export async function getDashboardSummary(): Promise<import("@/types").DashboardResponse> {
+  return request<import("@/types").DashboardResponse>("/api/v1/dashboard");
+}

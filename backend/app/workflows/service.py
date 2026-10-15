@@ -175,3 +175,16 @@ class WorkflowService:
         self.get_workflow(user_id, workflow_id)  # Ownership check
         return self.repository.list_events(user_id, workflow_id)
 
+    def list_user_events(
+        self,
+        user_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[WorkflowEventRecord], bool, int]:
+        """Lists chronological audit events across all workflows owned by the user."""
+        return self.repository.list_user_events(user_id, limit=limit, offset=offset)
+
+    def get_workflow_counts(self, user_id: str) -> dict[str, int]:
+        """Returns deterministic counts of workflows partitioned by status."""
+        return self.repository.count_by_status(user_id)
+

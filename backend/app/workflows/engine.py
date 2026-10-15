@@ -64,11 +64,13 @@ class WorkflowEngine:
         # Transition draft/ready -> running
         if workflow.status in {WorkflowStatus.DRAFT, WorkflowStatus.READY}:
             assert_workflow_transition(workflow.status, WorkflowStatus.RUNNING)
-            workflow = self.repository.update_workflow(
+            updated_wf = self.repository.update_workflow(
                 user_id,
                 workflow_id,
                 status=WorkflowStatus.RUNNING,
             )
+            if updated_wf:
+                workflow = updated_wf
             self._record_event(user_id, workflow_id, None, "workflow_started", {
                 "initial_status": workflow.status.value,
             })
@@ -80,9 +82,12 @@ class WorkflowEngine:
         # Main execution loop
         while True:
             # Refresh latest workflow state
-            workflow = self.repository.get(user_id, workflow_id)
-            if not workflow or workflow.status != WorkflowStatus.RUNNING:
+            current_wf = self.repository.get(user_id, workflow_id)
+            if not current_wf or current_wf.status != WorkflowStatus.RUNNING:
+                if current_wf:
+                    workflow = current_wf
                 break
+            workflow = current_wf
 
             steps = sorted(workflow.steps, key=lambda s: s.step_order)
             step_status_map = {s.step_id: s.status for s in steps}
@@ -172,7 +177,7 @@ class WorkflowEngine:
 
         # Update to running
         assert_step_transition(step.status, StepStatus.RUNNING)
-        step = self.repository.update_step(
+        updated_step = self.repository.update_step(
             user_id,
             workflow_id,
             step_id,
@@ -180,6 +185,8 @@ class WorkflowEngine:
             attempt_count=step.attempt_count + 1,
             started_at=datetime.now(timezone.utc),
         )
+        if updated_step:
+            step = updated_step
         self.repository.update_workflow(
             user_id,
             workflow_id,

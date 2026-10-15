@@ -107,9 +107,18 @@ export interface WorkflowListResponse {
 export interface WorkflowEventRecord {
   id: string;
   workflow_id: string;
+  workflow_title?: string | null;
   step_id?: string | null;
   event_type: string;
   details: Record<string, unknown>;
   created_at: string;
+}
+
+export interface WorkflowEventListResponse {
+  items: WorkflowEventRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }
 
