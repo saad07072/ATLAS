@@ -99,5 +99,43 @@ export interface SettingGroup {
   state: string;
 }
 
+export interface DashboardStatusCounts {
+  total: number;
+  draft: number;
+  ready: number;
+  running: number;
+  waiting_for_confirmation: number;
+  completed: number;
+  partially_completed: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface ConnectedServiceSummary {
+  id: string;
+  name: string;
+  status: "Connected" | "Disconnected" | "Unavailable";
+  configured: boolean;
+  actions_enabled: boolean;
+  description: string;
+}
+
+export interface DashboardSystemStatus {
+  app_name: string;
+  app_version: string;
+  environment: string;
+  timestamp: string;
+}
+
+export interface DashboardResponse {
+  workflow_counts: DashboardStatusCounts;
+  running_workflows: import("./workflow").WorkflowSummary[];
+  pending_approvals: import("./workflow").WorkflowSummary[];
+  recent_activity: import("./workflow").WorkflowEventRecord[];
+  recent_conversations: ConversationSummary[];
+  connected_services: ConnectedServiceSummary[];
+  system_status: DashboardSystemStatus;
+}
+
 export * from "./speech";
 export * from "./workflow";

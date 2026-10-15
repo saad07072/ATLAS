@@ -6,6 +6,7 @@ from backend.app.security.identity import require_authenticated_user_id
 from backend.app.workflows.models import (
     StepConfirmationRequest,
     WorkflowDefinition,
+    WorkflowEventListResponse,
     WorkflowEventRecord,
     WorkflowListResponse,
     WorkflowRecord,
@@ -60,6 +61,28 @@ def list_workflows(
     ]
     return WorkflowListResponse(
         items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
+    )
+
+
+@router.get("/events", response_model=WorkflowEventListResponse)
+def list_all_user_events(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
+    user_id: UUID = Depends(require_authenticated_user_id),
+    service: WorkflowService = Depends(get_workflow_service),
+) -> WorkflowEventListResponse:
+    """Lists chronological audit events across all workflows owned by the user."""
+    events, has_more, total = service.list_user_events(
+        str(user_id),
+        limit=limit,
+        offset=offset,
+    )
+    return WorkflowEventListResponse(
+        items=events,
         total=total,
         limit=limit,
         offset=offset,

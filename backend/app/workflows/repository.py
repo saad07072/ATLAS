@@ -81,6 +81,16 @@ class WorkflowRepository(Protocol):
         self, user_id: str, workflow_id: str
     ) -> list[WorkflowEventRecord]: ...
 
+    def list_user_events(
+        self,
+        user_id: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[WorkflowEventRecord], bool, int]: ...
+
+    def count_by_status(self, user_id: str) -> dict[str, int]: ...
+
 
 class InMemoryWorkflowRepository:
     """Thread-safe in-memory repository for unit tests and local execution."""
@@ -227,6 +237,41 @@ class InMemoryWorkflowRepository:
             return []
         events = self._events.get(workflow_id, [])
         return copy.deepcopy(events)
+
+    def list_user_events(
+        self,
+        user_id: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[WorkflowEventRecord], bool, int]:
+        user_wf_titles = {
+            wf.id: wf.title
+            for (uid, _), wf in self._workflows.items()
+            if uid == user_id
+        }
+        all_events: list[WorkflowEventRecord] = []
+        for wf_id, title in user_wf_titles.items():
+            for ev in self._events.get(wf_id, []):
+                ev_copy = copy.deepcopy(ev)
+                ev_copy.workflow_title = title
+                all_events.append(ev_copy)
+
+        all_events.sort(key=lambda e: e.created_at, reverse=True)
+        total = len(all_events)
+        sliced = all_events[offset : offset + limit]
+        has_more = (offset + limit) < total
+        return sliced, has_more, total
+
+    def count_by_status(self, user_id: str) -> dict[str, int]:
+        counts = {s.value: 0 for s in WorkflowStatus}
+        total = 0
+        for (uid, _), wf in self._workflows.items():
+            if uid == user_id:
+                total += 1
+                counts[wf.status.value] = counts.get(wf.status.value, 0) + 1
+        counts["total"] = total
+        return counts
 
 
 class PostgresWorkflowRepository:
@@ -658,6 +703,78 @@ class PostgresWorkflowRepository:
             ]
 
         return self._run(user_id, fetch_events)
+
+    def list_user_events(
+        self,
+        user_id: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[WorkflowEventRecord], bool, int]:
+        def fetch_user_events(connection: Any) -> tuple[list[WorkflowEventRecord], bool, int]:
+            count_row = connection.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM public.atlas_workflow_events
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            ).fetchone()
+            total = int(count_row["total"]) if count_row else 0
+
+            rows = connection.execute(
+                """
+                SELECT e.id::text AS id, e.workflow_id::text AS workflow_id, e.step_id,
+                       e.event_type, e.details, e.created_at,
+                       w.title AS workflow_title
+                FROM public.atlas_workflow_events e
+                LEFT JOIN public.atlas_workflows w ON w.id = e.workflow_id AND w.user_id = e.user_id
+                WHERE e.user_id = %s
+                ORDER BY e.created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (user_id, limit, offset),
+            ).fetchall()
+            events = [
+                WorkflowEventRecord(
+                    id=r["id"],
+                    workflow_id=r["workflow_id"],
+                    workflow_title=r.get("workflow_title"),
+                    step_id=r["step_id"],
+                    event_type=r["event_type"],
+                    details=r["details"] if isinstance(r["details"], dict) else json.loads(r["details"] or "{}"),
+                    created_at=r["created_at"],
+                )
+                for r in rows
+            ]
+            has_more = (offset + limit) < total
+            return events, has_more, total
+
+        return self._run(user_id, fetch_user_events)
+
+    def count_by_status(self, user_id: str) -> dict[str, int]:
+        def fetch_counts(connection: Any) -> dict[str, int]:
+            rows = connection.execute(
+                """
+                SELECT status, count(*) AS count
+                FROM public.atlas_workflows
+                WHERE user_id = %s
+                GROUP BY status
+                """,
+                (user_id,),
+            ).fetchall()
+            counts = {s.value: 0 for s in WorkflowStatus}
+            total = 0
+            for r in rows:
+                c = int(r["count"])
+                status_val = r["status"]
+                if status_val in counts:
+                    counts[status_val] = c
+                total += c
+            counts["total"] = total
+            return counts
+
+        return self._run(user_id, fetch_counts)
 
     def _run(self, user_id: str, operation: Callable[[Any], Any]) -> Any:
         if not self._database_url:

@@ -225,10 +225,19 @@ class WorkflowEventRecord(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     workflow_id: str
+    workflow_title: str | None = None
     step_id: str | None = None
     event_type: str = Field(max_length=64)
     details: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowEventListResponse(BaseModel):
+    items: list[WorkflowEventRecord]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class StepConfirmationRequest(BaseModel):
