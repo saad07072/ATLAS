@@ -3,6 +3,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
 from backend.app.security.identity import require_authenticated_user_id
+from backend.app.security.rate_limit import (
+    rate_limit_confirmations,
+    rate_limit_workflows,
+)
 from backend.app.workflows.models import (
     StepConfirmationRequest,
     WorkflowDefinition,
@@ -22,6 +26,7 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 @router.post("", response_model=WorkflowRecord, status_code=status.HTTP_201_CREATED)
 def create_workflow(
     definition: WorkflowDefinition,
+    _rate_limit: None = Depends(rate_limit_workflows),
     user_id: UUID = Depends(require_authenticated_user_id),
     service: WorkflowService = Depends(get_workflow_service),
 ) -> WorkflowRecord:
@@ -103,6 +108,7 @@ def get_workflow(
 @router.post("/{workflow_id}/start", response_model=WorkflowRecord)
 def start_workflow(
     workflow_id: str,
+    _rate_limit: None = Depends(rate_limit_workflows),
     user_id: UUID = Depends(require_authenticated_user_id),
     service: WorkflowService = Depends(get_workflow_service),
 ) -> WorkflowRecord:
@@ -113,6 +119,7 @@ def start_workflow(
 @router.post("/{workflow_id}/resume", response_model=WorkflowRecord)
 def resume_workflow(
     workflow_id: str,
+    _rate_limit: None = Depends(rate_limit_workflows),
     user_id: UUID = Depends(require_authenticated_user_id),
     service: WorkflowService = Depends(get_workflow_service),
 ) -> WorkflowRecord:
@@ -138,6 +145,7 @@ def confirm_step(
     workflow_id: str,
     step_id: str,
     confirmation: StepConfirmationRequest,
+    _rate_limit: None = Depends(rate_limit_confirmations),
     user_id: UUID = Depends(require_authenticated_user_id),
     service: WorkflowService = Depends(get_workflow_service),
 ) -> WorkflowRecord:

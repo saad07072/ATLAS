@@ -50,6 +50,25 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_jwt_secret: str | None = Field(default=None, repr=False)
 
+    # Rate Limiting & Security Hardening
+    rate_limit_enabled: bool = True
+    rate_limit_chat: str = "60/minute"
+    rate_limit_workflows: str = "30/minute"
+    rate_limit_confirmations: str = "30/minute"
+    rate_limit_oauth: str = "20/minute"
+    rate_limit_authenticated_default: str = "120/minute"
+    rate_limit_unauthenticated_default: str = "60/minute"
+
+    trust_proxy_headers: bool = False
+    trusted_proxies: list[str] = ["127.0.0.1", "::1"]
+
+    cors_allow_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    enable_hsts: bool = False
+    max_request_body_bytes: int = 1_048_576  # 1 MB
+
     model_config = SettingsConfigDict(
         env_file="backend/.env",
         env_file_encoding="utf-8",

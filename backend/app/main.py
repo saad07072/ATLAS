@@ -13,6 +13,11 @@ from backend.app.config.settings import settings
 from backend.app.core.error_handlers import register_exception_handlers
 from backend.app.core.logging_config import configure_logging
 
+from backend.app.core.security_middleware import (
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,12 +40,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Enforce Request Body Size Limits
+app.add_middleware(
+    RequestSizeLimitMiddleware,
+    max_body_size=settings.max_request_body_bytes,
+)
+
+# Apply Security Headers
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Hardened CORS policy
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 
