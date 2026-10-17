@@ -27,6 +27,9 @@ out/
 # Logs
 *.log
 
+# Evaluation runs (track latest_report.json only)
+reports/evaluations/evaluation_report_*.json
+
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.db
