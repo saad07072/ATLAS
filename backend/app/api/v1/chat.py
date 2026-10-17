@@ -17,6 +17,7 @@ from backend.app.core.exceptions import ApplicationError
 from backend.app.integrations.github.runtime import get_tool_executor
 from backend.app.memory.runtime import get_memory_service
 from backend.app.security.identity import get_authenticated_user_id
+from backend.app.security.rate_limit import rate_limit_chat
 
 router = APIRouter()
 
@@ -42,6 +43,7 @@ def get_chat_agent() -> ChatAgent:
 @router.post("/chat", response_model=ChatResponse)
 def chat(
     request: ChatRequest,
+    _rate_limit: None = Depends(rate_limit_chat),
     agent: ChatAgent = Depends(get_chat_agent),
     user_id: UUID = Depends(get_authenticated_user_id),
     conversations: ConversationService = Depends(get_conversation_service),

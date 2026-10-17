@@ -7,6 +7,7 @@ import { ActivityIndicator } from "@/components/ui/activity-indicator";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useVoice } from "@/hooks/use-voice";
 import {
+  ApiError,
   createConversation,
   deleteConversation,
   getConversation,
@@ -254,8 +255,14 @@ export function ChatPanel(): JSX.Element {
       } catch {
         await loadConversations();
       }
-    } catch {
-      setMessageError("ATLAS could not complete this response. Please retry.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setMessageError(err.message);
+      } else if (err instanceof Error) {
+        setMessageError(err.message || "ATLAS could not complete this response. Please retry.");
+      } else {
+        setMessageError("ATLAS could not complete this response. Please retry.");
+      }
       setDraft(trimmed);
       try {
         const detail = await getConversation(conversationId);

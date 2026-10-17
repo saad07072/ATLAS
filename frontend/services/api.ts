@@ -39,6 +39,25 @@ export interface GitHubConnectionStatus {
   actions_enabled: boolean;
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly retryAfter?: number;
+
+  constructor(
+    status: number,
+    message: string,
+    code = "api_error",
+    retryAfter?: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.retryAfter = retryAfter;
+  }
+}
+
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 
@@ -55,10 +74,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as
-      | { error?: { message?: string } }
+      | { error?: { message?: string; code?: string } }
       | null;
-    throw new Error(
-      body?.error?.message ?? "The ATLAS backend is unavailable right now.",
+
+    const retryAfterHeader = response.headers.get("Retry-After");
+    const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : undefined;
+    const code = body?.error?.code ?? (response.status === 429 ? "rate_limit_exceeded" : "api_error");
+
+    let message = body?.error?.message;
+    if (!message) {
+      if (response.status === 429) {
+        message = retryAfter && !isNaN(retryAfter)
+          ? `Rate limit reached. Please wait ${retryAfter} seconds before trying again.`
+          : "Too many requests. Please wait a moment before trying again.";
+      } else if (response.status === 401) {
+        message = "Authentication is required to perform this action.";
+      } else if (response.status === 403) {
+        message = "You do not have permission to perform this action.";
+      } else if (response.status === 413) {
+        message = "Request payload exceeds maximum allowed size.";
+      } else {
+        message = "The ATLAS backend is unavailable right now.";
+      }
+    }
+
+    throw new ApiError(
+      response.status,
+      message,
+      code,
+      retryAfter && !isNaN(retryAfter) ? retryAfter : undefined,
     );
   }
 

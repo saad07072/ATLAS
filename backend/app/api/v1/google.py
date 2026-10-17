@@ -13,6 +13,7 @@ from backend.app.integrations.google.oauth import (
 )
 from backend.app.integrations.google.runtime import get_google_oauth_service
 from backend.app.security.identity import get_authenticated_user_id
+from backend.app.security.rate_limit import rate_limit_oauth
 
 router = APIRouter(prefix="/google")
 
@@ -45,6 +46,7 @@ def google_connection_status(
 @router.get("/oauth/start", response_model=GoogleOAuthStartResponse)
 def google_oauth_start(
     response: Response,
+    _rate_limit: None = Depends(rate_limit_oauth),
     user_id: UUID = Depends(get_authenticated_user_id),
     oauth: GoogleOAuthService = Depends(get_google_oauth_service),
 ) -> GoogleOAuthStartResponse:
@@ -70,6 +72,7 @@ def google_oauth_start(
 def google_oauth_callback(
     request: Request,
     response: Response,
+    _rate_limit: None = Depends(rate_limit_oauth),
     oauth: GoogleOAuthService = Depends(get_google_oauth_service),
     code: str | None = Query(default=None, max_length=4096),
     state: str = Query(min_length=1, max_length=512),

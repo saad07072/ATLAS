@@ -5,6 +5,7 @@ class ApplicationError(Exception):
         *,
         code: str = "application_error",
         status_code: int = 400,
+        headers: dict[str, str] | None = None,
     ) -> None:
         if not 400 <= status_code < 600:
             raise ValueError("Application errors must use a 4xx or 5xx status code.")
@@ -13,3 +14,4 @@ class ApplicationError(Exception):
         self.message = message
         self.code = code
         self.status_code = status_code
+        self.headers = headers or {}
