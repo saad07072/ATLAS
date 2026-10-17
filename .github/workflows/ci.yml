@@ -1,0 +1,71 @@
+name: ATLAS CI & Reliability Evaluation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-and-evaluations:
+    name: Backend Tests & Evaluation Framework
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Regression Test Suite
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest backend/tests
+
+      - name: Run ATLAS Deterministic Evaluation Framework
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/run_evals.py
+
+  frontend-quality:
+    name: Frontend Lint, Typecheck & Production Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Typecheck TypeScript
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Run Voice Tests
+        run: node --test scripts/test-voice.mjs
+
+      - name: Build Next.js Production Bundle
+        run: npm run build
+
