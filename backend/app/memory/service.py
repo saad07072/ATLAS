@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from backend.app.memory.errors import MemoryNotFound
 from backend.app.memory.models import (
     MemoryCandidate,
