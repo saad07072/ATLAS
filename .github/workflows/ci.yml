@@ -50,7 +50,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -64,7 +64,7 @@ jobs:
         run: npx tsc -p tsconfig.json --noEmit
 
       - name: Run Voice Tests
-        run: node --test scripts/test-voice.mjs
+        run: node --experimental-strip-types --test scripts/test-voice.mjs
 
       - name: Build Next.js Production Bundle
         run: npm run build

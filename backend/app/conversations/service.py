@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from backend.app.conversations.errors import ConversationNotFound
 from backend.app.conversations.models import (
     DEFAULT_CONVERSATION_TITLE,
