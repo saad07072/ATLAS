@@ -1,6 +1,8 @@
+from pathlib import Path
+from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +27,16 @@ class Settings(BaseSettings):
                 return False
         return bool(value)
 
+    @field_validator("google_token_encryption_key", mode="before")
+    @classmethod
+    def parse_encryption_key(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            val = value.strip().strip("'\"")
+            if len(val) == 43 and not val.endswith("="):
+                val += "="
+            return val
+        return value
+
     llm_provider: str = "gemini"
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.0-flash"
@@ -34,9 +46,22 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_default_system_instruction: str | None = None
 
-    google_oauth_client_id: str | None = None
-    google_oauth_client_secret: str | None = None
-    google_oauth_redirect_uri: str | None = None
+    google_oauth_client_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("google_oauth_client_id", "google_client_id"),
+    )
+    google_oauth_client_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "google_oauth_client_secret", "google_client_secret"
+        ),
+    )
+    google_oauth_redirect_uri: str | None = Field(
+        default="http://127.0.0.1:8001/api/v1/google/oauth/callback",
+        validation_alias=AliasChoices(
+            "google_oauth_redirect_uri", "google_redirect_uri"
+        ),
+    )
     google_token_encryption_key: str | None = None
     google_api_timeout_seconds: float = 15.0
 
@@ -70,7 +95,7 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = 1_048_576  # 1 MB
 
     model_config = SettingsConfigDict(
-        env_file="backend/.env",
+        env_file=(str(Path(__file__).resolve().parent.parent.parent / ".env"), "backend/.env", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
