@@ -23,7 +23,7 @@ class LLMProviderTests(unittest.TestCase):
             configured = Settings(_env_file=None)
 
         self.assertEqual(configured.llm_provider, "gemini")
-        self.assertEqual(configured.gemini_model, "gemini-2.0-flash")
+        self.assertEqual(configured.gemini_model, "gemini-flash-latest")
         self.assertEqual(configured.llm_timeout_seconds, 30.0)
         self.assertEqual(configured.llm_max_retries, 3)
         self.assertEqual(configured.llm_max_output_tokens, 2048)
