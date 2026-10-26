@@ -136,7 +136,7 @@ export default function ConnectedServicesPage(): JSX.Element {
               ? "Unavailable"
               : isConnected
                 ? "Connected"
-                : googleStatus.actions_enabled
+                : googleStatus.configured
                   ? "Disconnected"
                   : "Unavailable"
             : isGitHub
@@ -144,7 +144,7 @@ export default function ConnectedServicesPage(): JSX.Element {
                 ? "Unavailable"
                 : githubStatus.connected
                   ? "Connected"
-                  : githubStatus.actions_enabled
+                  : githubStatus.configured
                     ? "Disconnected"
                     : "Unavailable"
               : service.status;

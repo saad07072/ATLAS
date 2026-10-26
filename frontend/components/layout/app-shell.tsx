@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { JSX, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
@@ -20,15 +20,11 @@ const navigation = [
 
 export function AppShell({ children }: { children: ReactNode }): JSX.Element {
   const pathname = usePathname();
-  const router = useRouter();
-  const { status: authStatus, email, error: authError, signOut } = useAuth();
+  const { email, signOut } = useAuth();
   const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authStatus !== "authenticated") {
-      return;
-    }
     let isCurrent = true;
 
     async function checkHealth(): Promise<void> {
@@ -49,43 +45,10 @@ export function AppShell({ children }: { children: ReactNode }): JSX.Element {
     return () => {
       isCurrent = false;
     };
-  }, [authStatus]);
+  }, []);
 
-  useEffect(() => {
-    if (authStatus === "unauthenticated" && pathname !== "/sign-in") {
-      router.replace("/sign-in");
-    }
-  }, [authStatus, pathname, router]);
-
-  if (pathname === "/sign-in") {
+  if (pathname === "/sign-in" || pathname === "/") {
     return <>{children}</>;
-  }
-
-  if (authStatus === "loading") {
-    return (
-      <main className="auth-state" role="status">
-        Checking your ATLAS sign-in session…
-      </main>
-    );
-  }
-
-  if (authStatus === "error") {
-    return (
-      <main className="auth-state" role="alert">
-        <h1>Authentication unavailable</h1>
-        <p>{authError}</p>
-        <Link className="ghost-button" href="/sign-in">Try signing in</Link>
-      </main>
-    );
-  }
-
-  if (authStatus !== "authenticated") {
-    return (
-      <main className="auth-state" role="status">
-        <p>Sign in to access your ATLAS workspace.</p>
-        <Link className="primary-button" href="/sign-in">Sign in</Link>
-      </main>
-    );
   }
 
   const indicatorState =
@@ -141,19 +104,27 @@ export function AppShell({ children }: { children: ReactNode }): JSX.Element {
 
           <div className="topbar-actions">
             <ActivityIndicator state={indicatorState} label={healthLabel} />
-            <span className="auth-email">{email}</span>
-            <button
-              type="button"
-              className="ghost-button sign-out-button"
-              onClick={() => {
-                setSignOutError(null);
-                void signOut().catch(() =>
-                  setSignOutError("Could not sign out. Please try again."),
-                );
-              }}
-            >
-              Sign out
-            </button>
+            {email ? (
+              <>
+                <span className="auth-email">{email}</span>
+                <button
+                  type="button"
+                  className="ghost-button sign-out-button"
+                  onClick={() => {
+                    setSignOutError(null);
+                    void signOut().catch(() =>
+                      setSignOutError("Could not sign out. Please try again."),
+                    );
+                  }}
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link className="ghost-button" href="/sign-in">
+                Sign in
+              </Link>
+            )}
           </div>
         </header>
 
