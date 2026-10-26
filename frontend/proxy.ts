@@ -1,15 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const publicPaths = new Set(["/sign-in", "/auth/callback"]);
-
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
-    return publicPaths.has(request.nextUrl.pathname)
-      ? NextResponse.next({ request })
-      : NextResponse.redirect(new URL("/sign-in", request.url));
+    return NextResponse.next({ request });
   }
 
   let response = NextResponse.next({ request });
@@ -28,28 +24,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     },
   });
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) {
-    if (publicPaths.has(request.nextUrl.pathname)) {
-      return response;
-    }
-    const redirect = NextResponse.redirect(new URL("/sign-in", request.url));
-    response.cookies.getAll().forEach((cookie) => {
-      redirect.cookies.set(cookie);
-    });
-    return redirect;
-  }
+  // Refresh auth cookies if available without forcing a redirect on visit
+  await supabase.auth.getUser();
 
-  if (request.nextUrl.pathname === "/sign-in") {
-    const redirect = NextResponse.redirect(new URL("/", request.url));
-    response.cookies.getAll().forEach((cookie) => {
-      redirect.cookies.set(cookie);
-    });
-    return redirect;
-  }
   return response;
 }
 

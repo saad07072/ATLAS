@@ -45,7 +45,10 @@ class GeminiProvider(LLMProvider):
         self.model_name = self.settings.gemini_model
         self.timeout = max(1.0, float(self.settings.llm_timeout_seconds))
         self.max_retries = max(0, int(self.settings.llm_max_retries))
-        self.client = client or genai.Client(api_key=self.settings.gemini_api_key)
+        self.client = client or genai.Client(
+            api_key=self.settings.gemini_api_key,
+            http_options=types.HttpOptions(timeout=int(self.timeout * 1000)),
+        )
 
     @property
     def model_name(self) -> str:
@@ -53,7 +56,7 @@ class GeminiProvider(LLMProvider):
 
     @model_name.setter
     def model_name(self, value: str) -> None:
-        self._model_name = value or "gemini-2.0-flash"
+        self._model_name = value or "gemini-flash-latest"
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         def _operation() -> LLMResponse:

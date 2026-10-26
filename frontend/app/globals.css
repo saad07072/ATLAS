@@ -1324,3 +1324,518 @@ img {
   border-top: 1px solid var(--border);
   margin-top: 1rem;
 }
+
+
+/* ========================================================================= */
+/* ATLAS CINEMATIC HOLOGRAPHIC HUD INTERFACE                                 */
+/* ========================================================================= */
+
+.atlas-viewport,
+.jarvis-viewport {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #07192f 0%, #030a16 65%, #01040a 100%);
+  color: #00f0ff;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+  user-select: none;
+  z-index: 50;
+}
+
+/* Subtle holographic scanline grid overlay */
+.atlas-viewport::before,
+.jarvis-viewport::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 240, 255, 0.02) 0px,
+    rgba(0, 240, 255, 0.02) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Vignette border glow */
+.atlas-viewport::after,
+.jarvis-viewport::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 100px rgba(0, 240, 255, 0.08), inset 0 0 180px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.atlas-canvas,
+.jarvis-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  display: block;
+}
+
+/* Top-Left Telemetry */
+.atlas-hud-top-left,
+.jarvis-hud-top-left {
+  position: absolute;
+  top: 2.2rem;
+  left: 2.5rem;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+.hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #00f0ff;
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.7);
+}
+
+.hud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00f0ff;
+  box-shadow: 0 0 10px #00f0ff;
+  display: inline-block;
+}
+
+.hud-dot.pulsing {
+  animation: atlasDotPulse 1.8s infinite ease-in-out;
+}
+
+.hud-dot.green {
+  background: #00ffaa;
+  box-shadow: 0 0 10px #00ffaa;
+}
+
+.hud-sub {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  color: rgba(0, 240, 255, 0.55);
+  margin-bottom: 0.5rem;
+}
+
+.hud-telemetry-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.hud-telemetry-row.right-aligned {
+  justify-content: flex-end;
+}
+
+.hud-val {
+  color: #00f0ff;
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+}
+
+.hud-val.state-standby {
+  color: #00f0ff;
+}
+
+.hud-val.state-listening {
+  color: #00ffaa;
+  text-shadow: 0 0 12px rgba(0, 255, 170, 0.9);
+}
+
+.hud-val.state-processing {
+  color: #a78bfa;
+  text-shadow: 0 0 12px rgba(167, 139, 250, 0.9);
+}
+
+.hud-val.state-speaking {
+  color: #fbbf24;
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.9);
+}
+
+/* Top-Right Telemetry */
+.atlas-hud-top-right,
+.jarvis-hud-top-right {
+  position: absolute;
+  top: 2.2rem;
+  right: 2.5rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.truncate-voice {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.hud-console-trigger {
+  pointer-events: auto;
+  margin-top: 0.85rem;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  color: #00f0ff;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  padding: 0.45rem 1rem;
+  border-radius: 4px;
+  transition: all 0.25s ease;
+  cursor: pointer;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.hud-console-trigger:hover {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: #00f0ff;
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Bottom-Left VU Meter */
+.atlas-hud-bottom-left {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 2.5rem;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.vu-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  color: rgba(0, 240, 255, 0.5);
+  font-weight: 600;
+}
+
+.vu-meter-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.vu-segment {
+  width: 5px;
+  height: 14px;
+  border-radius: 1px;
+  background: rgba(0, 240, 255, 0.15);
+  transition: all 0.08s ease;
+}
+
+.vu-segment.lit {
+  background: #00ffaa;
+  box-shadow: 0 0 6px #00ffaa;
+}
+
+.vu-segment.lit.peak {
+  background: #fbbf24;
+  box-shadow: 0 0 6px #fbbf24;
+}
+
+/* Floating Subtitle / Transcript Dialogue HUD */
+.atlas-dialogue-hud,
+.jarvis-dialogue-hud {
+  position: absolute;
+  bottom: 3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(840px, 92vw);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  pointer-events: none;
+}
+
+.dialogue-bubble {
+  width: 100%;
+  border-radius: 12px;
+  padding: 1.1rem 1.6rem;
+  backdrop-filter: blur(20px);
+  animation: hudFadeIn 0.3s ease;
+  pointer-events: auto;
+}
+
+.dialogue-bubble.user-stream {
+  background: rgba(0, 32, 64, 0.55);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(0, 240, 255, 0.08);
+}
+
+.dialogue-bubble.atlas-stream,
+.dialogue-bubble.jarvis-stream {
+  background: rgba(2, 14, 28, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.65), 0 0 25px rgba(0, 240, 255, 0.2), inset 0 0 18px rgba(0, 240, 255, 0.08);
+}
+
+.dialogue-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dialogue-speaker {
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.dialogue-speaker.atlas-tag,
+.dialogue-speaker.jarvis-tag {
+  color: #00f0ff;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
+}
+
+.audio-live-waves {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 12px;
+}
+
+.wave-bar {
+  width: 3px;
+  height: 100%;
+  background: #fbbf24;
+  border-radius: 1px;
+  animation: waveBarBounce 0.8s infinite ease-in-out;
+}
+
+.wave-bar:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.wave-bar:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.wave-bar:nth-child(4) {
+  animation-delay: 0.45s;
+}
+
+.dialogue-text {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #f1f5f9;
+  letter-spacing: 0.02em;
+  margin: 0.35rem 0 0 0;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.4);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.atlas-cue,
+.jarvis-cue {
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(0, 240, 255, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cue-pulse {
+  animation: atlasDotPulse 2.2s infinite ease-in-out;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.cue-listening {
+  color: #00ffaa;
+  text-shadow: 0 0 12px rgba(0, 255, 170, 0.8);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wave-icon {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #00ffaa;
+  box-shadow: 0 0 10px #00ffaa;
+  animation: atlasDotPulse 1s infinite ease-in-out;
+}
+
+.cue-thinking {
+  color: #a78bfa;
+  text-shadow: 0 0 12px rgba(167, 139, 250, 0.8);
+  animation: atlasDotPulse 1.2s infinite ease-in-out;
+}
+
+.cue-speaking {
+  color: #fbbf24;
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.8);
+}
+
+/* Holographic System Drawer */
+.atlas-console-drawer,
+.jarvis-console-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(440px, 92vw);
+  height: 100%;
+  background: rgba(3, 10, 20, 0.94);
+  border-left: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow: -15px 0 50px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(0, 240, 255, 0.05);
+  backdrop-filter: blur(24px);
+  z-index: 40;
+  padding: 2.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  pointer-events: auto;
+  animation: slideDrawer 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.25);
+  padding-bottom: 1rem;
+}
+
+.console-header h3 {
+  font-size: 0.88rem;
+  letter-spacing: 0.16em;
+  color: #00f0ff;
+  margin: 0;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}
+
+.hud-close-btn {
+  background: transparent;
+  border: none;
+  color: #00f0ff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.hud-close-btn:hover {
+  color: #ffffff;
+  transform: scale(1.15);
+}
+
+.console-desc {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+  margin: 0;
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.console-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 0.5rem;
+  overflow-y: auto;
+}
+
+.console-card {
+  padding: 1.1rem 1.2rem;
+  border-radius: 8px;
+  background: rgba(0, 240, 255, 0.04);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  transition: all 0.22s ease;
+  cursor: pointer;
+  text-decoration: none;
+  display: block;
+}
+
+.console-card:hover {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: #00f0ff;
+  transform: translateX(-4px);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+}
+
+.console-card h4 {
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  margin: 0 0 0.35rem 0;
+}
+
+.console-card p {
+  font-size: 0.74rem;
+  color: rgba(0, 240, 255, 0.75);
+  margin: 0;
+  line-height: 1.45;
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Animations */
+@keyframes atlasDotPulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes hudFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDrawer {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes waveBarBounce {
+  0%, 100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
