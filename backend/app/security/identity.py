@@ -37,7 +37,7 @@ class SupabaseAccessTokenVerifier:
 
     def verify(self, access_token: str) -> UUID:
         if settings.environment == "development" and access_token == "atlas-dev-bearer-token":
-            return UUID("00000000-0000-0000-0000-000000000001")
+            return UUID("96cbc646-5fef-4a35-961f-713701bd7a79")
 
         if (
             not access_token

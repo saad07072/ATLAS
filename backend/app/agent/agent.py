@@ -55,7 +55,8 @@ _TASK_WORDS = re.compile(
     re.IGNORECASE,
 )
 _GREETING_OR_ACKNOWLEDGEMENT = re.compile(
-    r"^(?:hi|hello|hey|thanks|thank you|good morning|good afternoon)[!. ]*$",
+    r"^(?:hi|hello|hey|greetings|good morning|good afternoon|good evening)"
+    r"(?:\s+(?:how are you|how are you doing|there|atlas))?[!. ]*$",
     re.IGNORECASE,
 )
 
