@@ -12,6 +12,11 @@ from backend.app.integrations.github.models import (
     GitHubPullRequest,
     GitHubRepository,
     GitHubRepositoryList,
+    GitHubWorkflow,
+    GitHubWorkflowList,
+    GitHubWorkflowRun,
+    GitHubWorkflowRunList,
+    GitHubWorkflowDispatchResult,
 )
 from backend.app.integrations.github.service import GitHubApiClient
 from backend.app.security.models import PermissionId, RiskLevel
@@ -186,6 +191,117 @@ def create_github_tools(github: GitHubApiClient) -> list[Tool]:
         ListIssuesTool(),
         GetPullRequestTool(),
         CreateIssueTool(),
+    ]
+    for tool in tools:
+        tool.github = github
+    return tools
+
+
+class WorkflowListInput(RepositoryInput):
+    pass
+
+
+class WorkflowRunsInput(RepositoryInput):
+    page: int = Field(default=1, ge=1, le=10000)
+    per_page: int = Field(default=30, ge=1, le=100)
+
+
+class WorkflowRunInput(RepositoryInput):
+    run_id: int = Field(gt=0)
+
+
+class WorkflowDispatchInput(RepositoryInput):
+    workflow_id: str = Field(min_length=1, max_length=256)
+    ref: str = Field(default="main", min_length=1, max_length=255)
+    inputs: dict[str, str] = Field(default_factory=dict)
+
+
+class ListWorkflowsTool(GitHubTool):
+    name = "github.list_workflows"
+    description = "Lists GitHub Actions workflows for a repository."
+    input_schema = WorkflowListInput
+    output_schema = GitHubWorkflowList
+    permission_required = True
+    permission_id = PermissionId.GITHUB_READ.value
+    risk_level = RiskLevel.LOW.value
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, WorkflowListInput):
+            raise TypeError
+        return self.github.list_workflows(owner=arguments.owner, repo=arguments.repo)
+
+
+class ListWorkflowRunsTool(GitHubTool):
+    name = "github.list_workflow_runs"
+    description = "Lists recent GitHub Actions workflow runs for a repository."
+    input_schema = WorkflowRunsInput
+    output_schema = GitHubWorkflowRunList
+    permission_required = True
+    permission_id = PermissionId.GITHUB_READ.value
+    risk_level = RiskLevel.LOW.value
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, WorkflowRunsInput):
+            raise TypeError
+        return self.github.list_workflow_runs(
+            owner=arguments.owner,
+            repo=arguments.repo,
+            page=arguments.page,
+            per_page=arguments.per_page,
+        )
+
+
+class GetWorkflowRunTool(GitHubTool):
+    name = "github.get_workflow_run"
+    description = "Gets details and status for a specific GitHub Actions workflow run."
+    input_schema = WorkflowRunInput
+    output_schema = GitHubWorkflowRun
+    permission_required = True
+    permission_id = PermissionId.GITHUB_READ.value
+    risk_level = RiskLevel.LOW.value
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, WorkflowRunInput):
+            raise TypeError
+        return self.github.get_workflow_run(
+            owner=arguments.owner,
+            repo=arguments.repo,
+            run_id=arguments.run_id,
+        )
+
+
+class TriggerWorkflowDispatchTool(GitHubTool):
+    name = "github.trigger_workflow_dispatch"
+    description = "Triggers a GitHub Actions workflow dispatch event."
+    input_schema = WorkflowDispatchInput
+    output_schema = GitHubWorkflowDispatchResult
+    permission_required = True
+    permission_id = PermissionId.GITHUB_ISSUE_WRITE.value
+    risk_level = RiskLevel.HIGH.value
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, WorkflowDispatchInput):
+            raise TypeError
+        return self.github.trigger_workflow_dispatch(
+            owner=arguments.owner,
+            repo=arguments.repo,
+            workflow_id=arguments.workflow_id,
+            ref=arguments.ref,
+            inputs=arguments.inputs,
+        )
+
+
+def create_all_github_tools(github: GitHubApiClient) -> list[Tool]:
+    tools: list[Tool] = [
+        ListRepositoriesTool(),
+        GetRepositoryTool(),
+        ListIssuesTool(),
+        GetPullRequestTool(),
+        CreateIssueTool(),
+        ListWorkflowsTool(),
+        ListWorkflowRunsTool(),
+        GetWorkflowRunTool(),
+        TriggerWorkflowDispatchTool(),
     ]
     for tool in tools:
         tool.github = github

@@ -29,6 +29,11 @@ from backend.app.integrations.github.tools import (
     IssueListInput,
     RepositoryInput,
     create_github_tools,
+    create_all_github_tools,
+    ListWorkflowsTool,
+    ListWorkflowRunsTool,
+    GetWorkflowRunTool,
+    TriggerWorkflowDispatchTool,
 )
 from backend.app.security.models import (
     PermissionDecision,
@@ -745,6 +750,51 @@ class GitHubIntegrationTests(unittest.TestCase):
     @staticmethod
     def _decode_segment(segment: str) -> bytes:
         return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+
+
+
+
+    def test_github_actions_tools_registered_with_correct_metadata(self) -> None:
+        github = Mock()
+        tools = create_all_github_tools(github)
+        tool_names = {t.name for t in tools}
+        self.assertIn("github.list_workflows", tool_names)
+        self.assertIn("github.list_workflow_runs", tool_names)
+        self.assertIn("github.get_workflow_run", tool_names)
+        self.assertIn("github.trigger_workflow_dispatch", tool_names)
+
+        dispatch_tool = next(t for t in tools if t.name == "github.trigger_workflow_dispatch")
+        self.assertEqual(dispatch_tool.risk_level, RiskLevel.HIGH.value)
+        self.assertTrue(dispatch_tool.permission_required)
+
+    def test_list_workflow_runs_parses_response(self) -> None:
+        raw_payload = {
+            "total_count": 1,
+            "workflow_runs": [
+                {
+                    "id": 40356267820,
+                    "name": "ATLAS CI & Reliability Evaluation",
+                    "head_branch": "main",
+                    "head_sha": "ea0930b",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "html_url": "https://github.com/saad07072/ATLAS/actions/runs/40356267820",
+                    "event": "push",
+                    "run_number": 14,
+                }
+            ],
+        }
+        transport = FakeTransport(
+            self.token_response(),
+            response(200, raw_payload),
+        )
+        client = GitHubApiClient(self.make_auth(transport), self.settings, transport=transport)
+        result = client.list_workflow_runs(owner="saad07072", repo="ATLAS")
+
+        self.assertEqual(result.total_count, 1)
+        self.assertEqual(len(result.workflow_runs), 1)
+        self.assertEqual(result.workflow_runs[0].conclusion, "success")
+        self.assertEqual(result.workflow_runs[0].status, "completed")
 
 
 if __name__ == "__main__":

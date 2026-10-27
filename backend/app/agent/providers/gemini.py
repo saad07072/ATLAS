@@ -59,38 +59,69 @@ class GeminiProvider(LLMProvider):
         self._model_name = value or "gemini-flash-latest"
 
     def generate(self, request: LLMRequest) -> LLMResponse:
-        def _operation() -> LLMResponse:
-            response = self.client.models.generate_content(
-                model=request.model or self.model_name,
-                contents=self._to_contents(request.messages),
-                config=self._build_config(request),
-            )
-            return self._map_response(response, request.model or self.model_name)
+        models_to_try = [request.model or self.model_name]
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash"):
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
 
-        return self._retry(_operation, "generate")
+        last_exc: Exception | None = None
+        for idx, model_to_use in enumerate(models_to_try):
+            def _operation() -> LLMResponse:
+                response = self.client.models.generate_content(
+                    model=model_to_use,
+                    contents=self._to_contents(request.messages),
+                    config=self._build_config(request),
+                )
+                return self._map_response(response, model_to_use)
+
+            try:
+                return self._retry(_operation, f"generate[{model_to_use}]")
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if idx == len(models_to_try) - 1 or isinstance(exc, (ProviderAuthenticationError, ProviderConfigurationError)):
+                    raise
+
+        if last_exc is not None:
+            raise last_exc
+        raise RetryExhaustedError("All generative models exhausted without response.")
 
     def generate_structured(
         self,
         request: LLMStructuredRequest,
     ) -> LLMStructuredResponse:
         schema = self._normalize_schema(request.response_schema)
+        models_to_try = [request.model or self.model_name]
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash"):
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
 
-        def _operation() -> LLMStructuredResponse:
-            response = self.client.models.generate_content(
-                model=request.model or self.model_name,
-                contents=self._to_contents(request.messages),
-                config=self._build_config(request, schema=schema),
-            )
-            parsed = self._parse_structured_payload(response)
-            return LLMStructuredResponse(
-                content=json.dumps(parsed, ensure_ascii=False),
-                model=request.model or self.model_name,
-                finish_reason=self._extract_finish_reason(response),
-                usage=self._extract_usage(response),
-                parsed=parsed,
-            )
+        last_exc: Exception | None = None
+        for idx, model_to_use in enumerate(models_to_try):
+            def _operation() -> LLMStructuredResponse:
+                response = self.client.models.generate_content(
+                    model=model_to_use,
+                    contents=self._to_contents(request.messages),
+                    config=self._build_config(request, schema=schema),
+                )
+                parsed = self._parse_structured_payload(response)
+                return LLMStructuredResponse(
+                    content=json.dumps(parsed, ensure_ascii=False),
+                    model=model_to_use,
+                    finish_reason=self._extract_finish_reason(response),
+                    usage=self._extract_usage(response),
+                    parsed=parsed,
+                )
 
-        return self._retry(_operation, "generate_structured")
+            try:
+                return self._retry(_operation, f"generate_structured[{model_to_use}]")
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if idx == len(models_to_try) - 1 or isinstance(exc, (ProviderAuthenticationError, ProviderConfigurationError)):
+                    raise
+
+        if last_exc is not None:
+            raise last_exc
+        raise RetryExhaustedError("All generative models exhausted without response.")
 
     def call_tools(
         self,

@@ -25,6 +25,11 @@ from backend.app.integrations.github.models import (
     GitHubPullRequest,
     GitHubRepository,
     GitHubRepositoryList,
+    GitHubWorkflow,
+    GitHubWorkflowList,
+    GitHubWorkflowRun,
+    GitHubWorkflowRunList,
+    GitHubWorkflowDispatchResult,
 )
 from backend.app.integrations.github.transport import HttpResponse, HttpTransport, UrllibTransport
 
@@ -35,6 +40,10 @@ _MAX_GET_ATTEMPTS = 3
 _REPOSITORY_PATH = re.compile(r"^/repos/[^/]+/[^/]+$")
 _ISSUES_PATH = re.compile(r"^/repos/[^/]+/[^/]+/issues$")
 _PULL_REQUEST_PATH = re.compile(r"^/repos/[^/]+/[^/]+/pulls/[1-9][0-9]*$")
+_WORKFLOWS_PATH = re.compile(r"^/repos/[^/]+/[^/]+/actions/workflows$")
+_WORKFLOW_RUNS_PATH = re.compile(r"^/repos/[^/]+/[^/]+/actions/runs$")
+_WORKFLOW_RUN_PATH = re.compile(r"^/repos/[^/]+/[^/]+/actions/runs/[1-9][0-9]*$")
+_WORKFLOW_DISPATCH_PATH = re.compile(r"^/repos/[^/]+/[^/]+/actions/workflows/[^/]+/dispatches$")
 
 
 class GitHubApiClient:
@@ -122,6 +131,95 @@ class GitHubApiClient:
         )
         return self._created_issue(self._object_payload(response))
 
+    def list_workflows(self, *, owner: str, repo: str) -> GitHubWorkflowList:
+        response = self._request("GET", f"{self._repository_path(owner, repo)}/actions/workflows")
+        payload = self._object_payload(response)
+        raw_workflows = payload.get("workflows", [])
+        workflows = [
+            GitHubWorkflow(
+                id=item["id"],
+                name=item["name"],
+                path=item.get("path", ""),
+                state=item.get("state", "active"),
+            )
+            for item in raw_workflows
+            if isinstance(item, dict) and "id" in item and "name" in item
+        ]
+        return GitHubWorkflowList(workflows=workflows, total_count=payload.get("total_count", len(workflows)))
+
+    def list_workflow_runs(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        page: int = 1,
+        per_page: int = 30,
+    ) -> GitHubWorkflowRunList:
+        response = self._request(
+            "GET",
+            f"{self._repository_path(owner, repo)}/actions/runs",
+            query={"page": page, "per_page": per_page},
+        )
+        payload = self._object_payload(response)
+        raw_runs = payload.get("workflow_runs", [])
+        runs = [
+            GitHubWorkflowRun(
+                id=item["id"],
+                name=item.get("name"),
+                head_branch=item.get("head_branch"),
+                head_sha=item.get("head_sha"),
+                status=item.get("status", "unknown"),
+                conclusion=item.get("conclusion"),
+                html_url=item.get("html_url", ""),
+                event=item.get("event"),
+                run_number=item.get("run_number"),
+            )
+            for item in raw_runs
+            if isinstance(item, dict) and "id" in item
+        ]
+        return GitHubWorkflowRunList(
+            workflow_runs=runs,
+            total_count=payload.get("total_count", len(runs)),
+            next_page=self._next_page(response),
+        )
+
+    def get_workflow_run(self, *, owner: str, repo: str, run_id: int) -> GitHubWorkflowRun:
+        response = self._request(
+            "GET",
+            f"{self._repository_path(owner, repo)}/actions/runs/{run_id}",
+        )
+        payload = self._object_payload(response)
+        return GitHubWorkflowRun(
+            id=payload["id"],
+            name=payload.get("name"),
+            head_branch=payload.get("head_branch"),
+            head_sha=payload.get("head_sha"),
+            status=payload.get("status", "unknown"),
+            conclusion=payload.get("conclusion"),
+            html_url=payload.get("html_url", ""),
+            event=payload.get("event"),
+            run_number=payload.get("run_number"),
+        )
+
+    def trigger_workflow_dispatch(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        workflow_id: str | int,
+        ref: str = "main",
+        inputs: dict[str, Any] | None = None,
+    ) -> GitHubWorkflowDispatchResult:
+        response = self._request(
+            "POST",
+            f"{self._repository_path(owner, repo)}/actions/workflows/{workflow_id}/dispatches",
+            body={"ref": ref, "inputs": inputs or {}},
+        )
+        return GitHubWorkflowDispatchResult(
+            status="dispatched",
+            message=f"Workflow {workflow_id} dispatched successfully for branch {ref}.",
+        )
+
     def _request(
         self,
         method: str,
@@ -137,9 +235,16 @@ class GitHubApiClient:
                 or _REPOSITORY_PATH.fullmatch(path) is not None
                 or _ISSUES_PATH.fullmatch(path) is not None
                 or _PULL_REQUEST_PATH.fullmatch(path) is not None
+                or _WORKFLOWS_PATH.fullmatch(path) is not None
+                or _WORKFLOW_RUNS_PATH.fullmatch(path) is not None
+                or _WORKFLOW_RUN_PATH.fullmatch(path) is not None
             )
         ) or (
-            method == "POST" and _ISSUES_PATH.fullmatch(path) is not None
+            method == "POST"
+            and (
+                _ISSUES_PATH.fullmatch(path) is not None
+                or _WORKFLOW_DISPATCH_PATH.fullmatch(path) is not None
+            )
         )
         if not allowed_route:
             raise GitHubIntegrationError(
