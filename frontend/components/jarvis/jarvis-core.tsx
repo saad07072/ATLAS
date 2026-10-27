@@ -323,16 +323,17 @@ export function AtlasCore(): JSX.Element {
       accumulatedTextRef.current = activeText;
       setAtlasState("listening");
 
-      // Auto-dispatch strategy:
-      // A. If browser emitted final segment, commit fast (450ms)
-      // B. If interim segment, commit after brief pause in speech (950ms)
+      // Industry-Standard Voice Activity Detection (VAD) Silence Dispatcher:
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
-      const delay = final ? 450 : 950;
+      // Fast-commit on final (380ms) or natural pause in speech (1000ms)
+      const delay = final ? 380 : 1000;
       debounceTimerRef.current = setTimeout(() => {
         if (!isBusyRef.current && accumulatedTextRef.current.trim()) {
           const textToDispatch = accumulatedTextRef.current.trim();
           accumulatedTextRef.current = "";
+          setAtlasResponse("Processing request, sir...");
           void sendToAtlas(textToDispatch);
         }
       }, delay);
@@ -690,7 +691,18 @@ export function AtlasCore(): JSX.Element {
     <div
       className="atlas-viewport"
       onClick={() => {
-        if (!isActive) void activateAtlas();
+        if (!isActive) {
+          void activateAtlas();
+        } else if (atlasStateRef.current === "speaking") {
+          window.speechSynthesis?.cancel();
+          isBusyRef.current = false;
+          setAtlasState("listening");
+          startRecognitionSafe();
+        } else if (atlasStateRef.current === "listening" && accumulatedTextRef.current.trim()) {
+          const textToDispatch = accumulatedTextRef.current.trim();
+          accumulatedTextRef.current = "";
+          void sendToAtlas(textToDispatch);
+        }
       }}
     >
       {/* 1. Holographic HUD Canvas */}

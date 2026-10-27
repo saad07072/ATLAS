@@ -62,3 +62,44 @@ class GitHubConnectionStatus(BaseModel):
     configured: bool
     connected: bool
     actions_enabled: bool
+
+
+class GitHubWorkflow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=256)
+    path: str = Field(min_length=1, max_length=1024)
+    state: str = Field(min_length=1, max_length=50)
+
+
+class GitHubWorkflowList(BaseModel):
+    workflows: list[GitHubWorkflow]
+    total_count: int = 0
+
+
+class GitHubWorkflowRun(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(gt=0)
+    name: str | None = None
+    head_branch: str | None = None
+    head_sha: str | None = None
+    status: str = Field(min_length=1, max_length=50)
+    conclusion: str | None = None
+    html_url: str = Field(min_length=1, max_length=2048)
+    event: str | None = None
+    run_number: int | None = None
+
+
+class GitHubWorkflowRunList(BaseModel):
+    workflow_runs: list[GitHubWorkflowRun]
+    total_count: int = 0
+    next_page: int | None = None
+
+
+class GitHubWorkflowDispatchResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = "dispatched"
+    message: str = "Workflow dispatch initiated successfully."
