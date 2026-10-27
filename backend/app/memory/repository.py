@@ -66,7 +66,7 @@ class PostgresMemoryRepository:
                 SELECT id::text AS id, memory_type AS type, memory_key, content,
                        source, created_at, updated_at
                 FROM public.atlas_memories
-                WHERE user_id = %s AND (%s IS NULL OR memory_type = %s)
+                WHERE user_id = %s AND (%s::text IS NULL OR memory_type = %s)
                 ORDER BY updated_at DESC, id
                 LIMIT %s
                 """,
@@ -195,7 +195,7 @@ class PostgresMemoryRepository:
                 FROM public.atlas_memories AS m
                 CROSS JOIN search_query AS q
                 WHERE m.user_id = %s
-                  AND (%s IS NULL OR m.memory_type = %s)
+                  AND (%s::text IS NULL OR m.memory_type = %s)
                   AND m.search_document @@ q.terms
                 ORDER BY relevance DESC, m.updated_at DESC, m.id
                 LIMIT %s

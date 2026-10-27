@@ -60,7 +60,7 @@ class GeminiProvider(LLMProvider):
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         models_to_try = [request.model or self.model_name]
-        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash"):
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash"):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 
@@ -91,7 +91,7 @@ class GeminiProvider(LLMProvider):
     ) -> LLMStructuredResponse:
         schema = self._normalize_schema(request.response_schema)
         models_to_try = [request.model or self.model_name]
-        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash"):
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash"):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 
@@ -332,5 +332,5 @@ class GeminiProvider(LLMProvider):
     def _is_retryable(self, exc: Exception) -> bool:
         return isinstance(
             exc,
-            (ProviderTimeoutError, ProviderRateLimitError, ProviderAPIError),
+            (ProviderTimeoutError, ProviderRateLimitError),
         )
