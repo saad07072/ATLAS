@@ -26,3 +26,11 @@ def create_tool_execution_service(tools: list[Tool]) -> ToolExecutionService:
         registry,
         PermissionEngine(PermissionPolicy(rules)),
     )
+
+
+def create_default_tool_execution_service() -> ToolExecutionService:
+    from backend.app.tools.demo import EchoTool
+    from backend.app.tools.system_tools import get_all_system_tools
+
+    all_tools = [EchoTool(), *get_all_system_tools()]
+    return create_tool_execution_service(all_tools)

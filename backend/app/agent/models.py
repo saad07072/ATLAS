@@ -12,6 +12,7 @@ ChatIntent = Literal[
     "task_request",
     "clarification",
     "unsupported",
+    "action_execution",
 ]
 ChatRole = Literal["user", "assistant"]
 
