@@ -59,8 +59,20 @@ class ChatRequest(BaseModel):
         return self
 
 
+class ActionExecutionRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    target: str | None = None
+    status: Literal["requested", "in_progress", "success", "failed"] = "success"
+    message: str
+    timestamp: str | None = None
+    verified: bool = True
+
+
 class ChatResponse(BaseModel):
     intent: ChatIntent
     message: str = Field(min_length=1, max_length=8000)
     requires_clarification: bool = False
     conversation_id: UUID | None = None
+    actions: list[ActionExecutionRecord] = Field(default_factory=list)

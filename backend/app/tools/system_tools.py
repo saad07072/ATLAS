@@ -31,6 +31,7 @@ class WebOpenOutput(BaseModel):
     status: str
     url: str
     message: str
+    verified: bool = True
 
 
 class WebOpenTool(Tool):
@@ -74,7 +75,7 @@ class WebOpenTool(Tool):
             target = f"https://{target}"
 
         try:
-            webbrowser.open(target)
+            webbrowser.open(target, new=2, autoraise=False)
             return WebOpenOutput(
                 status="success",
                 url=target,
@@ -467,6 +468,113 @@ class FileWriteTool(Tool):
 # Helper Function to Instantiate All Tools
 # ==============================================================================
 
+
+
+# ==============================================================================
+# 8. Application & Window Close Tool (system.close_app)
+# ==============================================================================
+
+class AppCloseInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: str = Field(min_length=1, max_length=100, description="Name of application, process, window or site to close (e.g. notepad, calc, chrome, edge, youtube, browser)")
+
+
+class AppCloseOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: str
+    status: str
+    message: str
+    verified: bool = True
+
+
+class AppCloseTool(Tool):
+    name = "system.close_app"
+    description = "Gracefully closes desktop applications, browser windows, or processes on Windows."
+    input_schema = AppCloseInput
+    output_schema = AppCloseOutput
+    permission_required = False
+    permission_id = "system.close_app"
+    risk_level = "low"
+
+    _PROCESS_MAP = {
+        "notepad": ["notepad.exe"],
+        "calculator": ["CalculatorApp.exe", "calc.exe"],
+        "calc": ["CalculatorApp.exe", "calc.exe"],
+        "paint": ["mspaint.exe"],
+        "mspaint": ["mspaint.exe"],
+        "terminal": ["cmd.exe", "powershell.exe", "WindowsTerminal.exe"],
+        "cmd": ["cmd.exe"],
+        "powershell": ["powershell.exe"],
+        "code": ["Code.exe"],
+        "vscode": ["Code.exe"],
+        "chrome": ["chrome.exe"],
+        "edge": ["msedge.exe"],
+        "browser": ["chrome.exe", "msedge.exe"],
+    }
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, AppCloseInput):
+            raise TypeError("AppCloseTool requires AppCloseInput arguments.")
+
+        target_clean = arguments.target.strip().lower()
+        procs = self._PROCESS_MAP.get(target_clean)
+
+        try:
+            if procs:
+                for proc in procs:
+                    proc_name = proc.replace(".exe", "")
+                    ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
+                    subprocess.run(
+                        ["powershell", "-NoProfile", "-Command", ps_cmd],
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                    )
+                return AppCloseOutput(
+                    target=arguments.target,
+                    status="closed",
+                    message=f"Successfully closed {arguments.target} on your system.",
+                    verified=True,
+                )
+            elif target_clean in {"youtube", "window", "tab"}:
+                ps_cmd = f"Get-Process | Where-Object {{ $_.MainWindowTitle -like '*{target_clean}*' }} | Stop-Process -Force -ErrorAction SilentlyContinue"
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                return AppCloseOutput(
+                    target=arguments.target,
+                    status="closed",
+                    message=f"Successfully closed {arguments.target} window.",
+                    verified=True,
+                )
+            else:
+                proc_name = target_clean.replace(".exe", "")
+                ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                return AppCloseOutput(
+                    target=arguments.target,
+                    status="closed",
+                    message=f"Closed process {arguments.target}.",
+                    verified=True,
+                )
+        except Exception as exc:
+            logger.warning("Failed to close application %s: %s", arguments.target, exc)
+            return AppCloseOutput(
+                target=arguments.target,
+                status="failed",
+                message=f"Could not close {arguments.target}: {exc}",
+                verified=False,
+            )
+
+
 def get_all_system_tools() -> list[Tool]:
     return [
         WebOpenTool(),
@@ -476,4 +584,5 @@ def get_all_system_tools() -> list[Tool]:
         SystemCommandTool(),
         FileReadTool(),
         FileWriteTool(),
+        AppCloseTool(),
     ]

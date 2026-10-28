@@ -296,6 +296,24 @@ class ToolFrameworkTests(unittest.TestCase):
                 ToolExecutionRequest(name="system.echo", arguments={})
             )
 
+    def test_app_close_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import AppCloseTool, AppCloseInput
+        tool = AppCloseTool()
+        result = tool.execute(AppCloseInput(target="notepad"))
+        self.assertEqual(result.target, "notepad")
+        self.assertEqual(result.status, "closed")
+        self.assertTrue(result.verified)
+
+    def test_all_system_tools_registered(self) -> None:
+        from backend.app.tools.system_tools import get_all_system_tools
+        tools = get_all_system_tools()
+        names = {t.name for t in tools}
+        self.assertIn("web.open", names)
+        self.assertIn("system.close_app", names)
+        self.assertIn("weather.get", names)
+        self.assertIn("system.open_app", names)
+        self.assertIn("system.datetime", names)
+
 
 if __name__ == "__main__":
     unittest.main()

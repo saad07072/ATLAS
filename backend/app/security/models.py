@@ -25,6 +25,8 @@ class PermissionId(StrEnum):
     SYSTEM_FILE_READ = "system.file_read"
     SYSTEM_FILE_WRITE = "system.file_write"
     SYSTEM_DATETIME = "system.datetime"
+    SYSTEM_CLOSE_APP = "system.close_app"
+    WEB_CLOSE = "web.close"
 
 
 class RiskLevel(StrEnum):

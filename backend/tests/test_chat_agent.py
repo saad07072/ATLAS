@@ -150,6 +150,7 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
                 "message": "A useful response.",
                 "requires_clarification": False,
                 "conversation_id": "f7bd17ab-f527-49c8-a464-399b974b9c57",
+                "actions": [],
             },
         )
 

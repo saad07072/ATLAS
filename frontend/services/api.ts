@@ -15,6 +15,15 @@ export interface ChatHistoryMessage {
   content: string;
 }
 
+export interface ActionRecord {
+  tool: string;
+  target?: string | null;
+  status: "requested" | "in_progress" | "success" | "failed";
+  message: string;
+  timestamp?: string | null;
+  verified?: boolean;
+}
+
 export interface ChatApiResponse {
   intent:
     | "conversation"
@@ -25,6 +34,7 @@ export interface ChatApiResponse {
   message: string;
   requires_clarification: boolean;
   conversation_id: string;
+  actions?: ActionRecord[];
 }
 
 export interface GoogleConnectionStatus {
@@ -117,12 +127,14 @@ export async function sendChatMessage(
   message: string,
   history: ChatHistoryMessage[] = [],
   conversationId?: string,
+  signal?: AbortSignal,
 ): Promise<ChatApiResponse> {
   return request<ChatApiResponse>("/api/v1/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
+    signal,
     body: JSON.stringify({
       message,
       ...(conversationId ? { conversation_id: conversationId } : { history }),
