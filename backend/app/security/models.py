@@ -18,6 +18,15 @@ class PermissionId(StrEnum):
     GITHUB_ISSUE_WRITE = "github.issue.write"
     GITHUB_PULL_REQUEST_WRITE = "github.pull_request.write"
     GITHUB_CODE_WRITE = "github.code.write"
+    WEB_OPEN = "web.open"
+    WEATHER_GET = "weather.get"
+    SYSTEM_OPEN_APP = "system.open_app"
+    SYSTEM_RUN_COMMAND = "system.run_command"
+    SYSTEM_FILE_READ = "system.file_read"
+    SYSTEM_FILE_WRITE = "system.file_write"
+    SYSTEM_DATETIME = "system.datetime"
+    SYSTEM_CLOSE_APP = "system.close_app"
+    WEB_CLOSE = "web.close"
 
 
 class RiskLevel(StrEnum):

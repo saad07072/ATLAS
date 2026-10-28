@@ -14,7 +14,7 @@ from backend.app.conversations.errors import (
 from backend.app.conversations.runtime import get_conversation_service
 from backend.app.conversations.service import ConversationService
 from backend.app.core.exceptions import ApplicationError
-from backend.app.integrations.github.runtime import get_tool_executor
+from backend.app.tools.factory import create_default_tool_execution_service
 from backend.app.memory.runtime import get_memory_service
 from backend.app.security.identity import get_authenticated_user_id
 from backend.app.security.rate_limit import rate_limit_chat
@@ -35,7 +35,7 @@ def get_chat_agent() -> ChatAgent:
     return ChatAgent(
         provider=provider,
         secret=settings.gemini_api_key,
-        tool_executor=get_tool_executor(),
+        tool_executor=create_default_tool_execution_service(),
         memory_service=get_memory_service(),
     )
 

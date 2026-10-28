@@ -4,7 +4,7 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
-import { sendChatMessage } from "@/services/api";
+import { sendChatMessage, type ActionRecord } from "@/services/api";
 
 export type AtlasState = "standby" | "listening" | "processing" | "speaking";
 
@@ -59,6 +59,12 @@ export function AtlasCore(): JSX.Element {
     activeVoice: "Detecting neural voice...",
   });
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
+  const [lastAction, setLastAction] = useState<ActionRecord | null>(null);
+  const [actionTimer, setActionTimer] = useState<number>(0);
+  const actionTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastDispatchedTextRef = useRef<string>("");
+  const lastDispatchedTimeRef = useRef<number>(0);
 
   // Audio & Speech References
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -197,28 +203,35 @@ export function AtlasCore(): JSX.Element {
 
     let fallbackTimer: NodeJS.Timeout | null = null;
 
-    const handleSpeechEnd = () => {
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      isBusyRef.current = false;
-      accumulatedTextRef.current = "";
-      setTranscript("");
-      // Return seamlessly to ambient listening loop
-      setAtlasState("listening");
-      startRecognitionSafe();
-    };
-
     utterance.onstart = () => {
       isBusyRef.current = true;
       setAtlasState("speaking");
+      try {
+        recognitionRef.current?.abort();
+      } catch {}
     };
 
-    utterance.onend = handleSpeechEnd;
-    utterance.onerror = handleSpeechEnd;
+    const handleSpeechComplete = () => {
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      setAtlasState("standby");
+      setTimeout(() => {
+        isBusyRef.current = false;
+        accumulatedTextRef.current = "";
+        setTranscript("");
+        if (isActiveRef.current) {
+          setAtlasState("listening");
+          startRecognitionSafe();
+        }
+      }, 450);
+    };
+
+    utterance.onend = handleSpeechComplete;
+    utterance.onerror = handleSpeechComplete;
 
     // Safety fallback: ensure speech state unlocks even if browser drops onend
     const wordCount = cleanText.split(/\s+/).length;
     const estimatedDurationMs = Math.max(3200, (wordCount / 2.0) * 1000 + 2200);
-    fallbackTimer = setTimeout(handleSpeechEnd, estimatedDurationMs);
+    fallbackTimer = setTimeout(handleSpeechComplete, estimatedDurationMs);
 
     window.speechSynthesis.speak(utterance);
   }, [startRecognitionSafe]);
@@ -226,10 +239,51 @@ export function AtlasCore(): JSX.Element {
   // -------------------------------------------------------------
   // 3. Backend Agent Request Dispatcher
   // -------------------------------------------------------------
+  const abortCurrentTask = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (actionTimerIntervalRef.current) {
+      clearInterval(actionTimerIntervalRef.current);
+      actionTimerIntervalRef.current = null;
+    }
+    isBusyRef.current = false;
+    setAtlasState("listening");
+    setAtlasResponse("Task execution aborted on your command, sir.");
+    startRecognitionSafe();
+  }, [startRecognitionSafe]);
+
   const sendToAtlas = useCallback(
     async (userMessage: string) => {
       const query = userMessage.trim();
       if (!query) return;
+
+      // Client-side deduplication (drop duplicate within 3.5s)
+      const now = Date.now();
+      if (
+        query.toLowerCase() === lastDispatchedTextRef.current.toLowerCase() &&
+        now - lastDispatchedTimeRef.current < 3500
+      ) {
+        return;
+      }
+      lastDispatchedTextRef.current = query;
+      lastDispatchedTimeRef.current = now;
+
+      // Abort previous in-flight task if any
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // Elapsed action timer
+      setActionTimer(0);
+      if (actionTimerIntervalRef.current) clearInterval(actionTimerIntervalRef.current);
+      const startTime = Date.now();
+      actionTimerIntervalRef.current = setInterval(() => {
+        setActionTimer((Date.now() - startTime) / 1000);
+      }, 100);
 
       // Mark busy immediately so recognition won't restart on end
       isBusyRef.current = true;
@@ -251,16 +305,43 @@ export function AtlasCore(): JSX.Element {
           query,
           [],
           conversationIdRef.current,
+          controller.signal,
         );
+
+        if (actionTimerIntervalRef.current) {
+          clearInterval(actionTimerIntervalRef.current);
+          actionTimerIntervalRef.current = null;
+        }
 
         if (data.conversation_id) {
           conversationIdRef.current = data.conversation_id;
         }
 
+        if (data.actions && data.actions.length > 0) {
+          const act = data.actions[0];
+          setLastAction(act);
+          setTimeout(() => {
+            setLastAction(null);
+          }, 9000);
+        }
+
         const reply = data.message || "Right away, sir. Task acknowledged.";
         setAtlasResponse(reply);
         speakAtlas(reply);
-      } catch (err) {
+      } catch (err: unknown) {
+        if (actionTimerIntervalRef.current) {
+          clearInterval(actionTimerIntervalRef.current);
+          actionTimerIntervalRef.current = null;
+        }
+
+        if (err instanceof Error && err.name === "AbortError") {
+          isBusyRef.current = false;
+          setAtlasState("listening");
+          setAtlasResponse("Task execution cancelled on your order, sir.");
+          startRecognitionSafe();
+          return;
+        }
+
         const errorReply =
           err instanceof Error
             ? err.message
@@ -269,7 +350,7 @@ export function AtlasCore(): JSX.Element {
         speakAtlas(errorReply);
       }
     },
-    [speakAtlas],
+    [speakAtlas, startRecognitionSafe],
   );
 
   // -------------------------------------------------------------
@@ -404,7 +485,9 @@ export function AtlasCore(): JSX.Element {
           void sendToAtlas(query);
         }
       } else if (e.code === "Escape") {
-        if (atlasStateRef.current === "speaking") {
+        if (atlasStateRef.current === "processing") {
+          abortCurrentTask();
+        } else if (atlasStateRef.current === "speaking") {
           window.speechSynthesis?.cancel();
           isBusyRef.current = false;
           setAtlasState("listening");
@@ -414,7 +497,7 @@ export function AtlasCore(): JSX.Element {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activateAtlas, isActive, sendToAtlas, startRecognitionSafe]);
+  }, [activateAtlas, abortCurrentTask, isActive, sendToAtlas, startRecognitionSafe]);
 
   // -------------------------------------------------------------
   // 6. Holographic Arc Reactor & Gyroscope Core Animation (60fps)
@@ -796,6 +879,40 @@ export function AtlasCore(): JSX.Element {
           </div>
         )}
 
+        {/* Active Task Progress Indicator during Processing */}
+        {atlasState === "processing" && (
+          <div className="task-progress-hud">
+            <span className="task-spinner" />
+            <span className="task-phase">EXECUTING TASK PROTOCOL</span>
+            <span className="task-timer">[T+ {actionTimer.toFixed(1)}s]</span>
+            <button
+              type="button"
+              className="task-abort-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                abortCurrentTask();
+              }}
+              title="Abort current task (ESC)"
+            >
+              ABORT [ESC]
+            </button>
+          </div>
+        )}
+
+        {/* Action Outcome Verified Badge */}
+        {lastAction && (
+          <div className={`action-outcome-pill ${lastAction.status}`}>
+            <span className="action-status-icon">
+              {lastAction.status === "success" ? "✓" : "⚠"}
+            </span>
+            <span className="action-tool-tag">[{lastAction.tool}]</span>
+            <span className="action-detail">{lastAction.message}</span>
+            <span className="action-verified-badge">
+              {lastAction.verified ? "VERIFIED" : "UNVERIFIED"}
+            </span>
+          </div>
+        )}
+
         {/* ATLAS Spoken Response Stream */}
         <div className="dialogue-bubble atlas-stream">
           <div className="dialogue-header">
@@ -821,7 +938,7 @@ export function AtlasCore(): JSX.Element {
               <span className="wave-icon" /> LISTENING... SPEAK NATURALLY, SIR
             </span>
           ) : atlasState === "processing" ? (
-            <span className="cue-thinking">COMPUTING NEURAL RESPONSE...</span>
+            <span className="cue-thinking">COMPUTING NEURAL RESPONSE &amp; VERIFYING ACTIONS...</span>
           ) : (
             <span className="cue-speaking">TRANSMITTING VOICE PROTOCOL...</span>
           )}

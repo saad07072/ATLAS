@@ -1844,3 +1844,106 @@ img {
     transform: scaleY(1);
   }
 }
+
+
+/* Action Verification Outcome Pill & Task Progress HUD */
+.action-outcome-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  backdrop-filter: blur(12px);
+  animation: hudFadeIn 0.3s ease;
+  pointer-events: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.action-outcome-pill.success {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.6);
+  color: #10b981;
+}
+
+.action-outcome-pill.failed {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #ef4444;
+}
+
+.action-status-icon {
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.action-tool-tag {
+  color: #00f0ff;
+  font-weight: 700;
+}
+
+.action-detail {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.action-verified-badge {
+  font-size: 0.68rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  color: #00f0ff;
+}
+
+.task-progress-hud {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 9999px;
+  background: rgba(139, 92, 246, 0.18);
+  border: 1px solid rgba(139, 92, 246, 0.55);
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: #c4b5fd;
+  backdrop-filter: blur(14px);
+  animation: hudFadeIn 0.25s ease;
+  pointer-events: auto;
+}
+
+.task-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(139, 92, 246, 0.3);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.task-phase {
+  font-weight: 700;
+}
+
+.task-timer {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-abort-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.task-abort-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
+  color: #fff;
+}
