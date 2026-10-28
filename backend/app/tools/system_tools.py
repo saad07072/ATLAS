@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
+import sys
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -517,54 +519,42 @@ class AppCloseTool(Tool):
             raise TypeError("AppCloseTool requires AppCloseInput arguments.")
 
         target_clean = arguments.target.strip().lower()
-        procs = self._PROCESS_MAP.get(target_clean)
+        procs = self._PROCESS_MAP.get(target_clean) or [target_clean]
 
         try:
-            if procs:
+            if sys.platform == "win32":
                 for proc in procs:
                     proc_name = proc.replace(".exe", "")
-                    ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
-                    subprocess.run(
-                        ["powershell", "-NoProfile", "-Command", ps_cmd],
-                        capture_output=True,
-                        text=True,
-                        timeout=3,
-                    )
-                return AppCloseOutput(
-                    target=arguments.target,
-                    status="closed",
-                    message=f"Successfully closed {arguments.target} on your system.",
-                    verified=True,
-                )
-            elif target_clean in {"youtube", "window", "tab"}:
-                ps_cmd = f"Get-Process | Where-Object {{ $_.MainWindowTitle -like '*{target_clean}*' }} | Stop-Process -Force -ErrorAction SilentlyContinue"
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", ps_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                return AppCloseOutput(
-                    target=arguments.target,
-                    status="closed",
-                    message=f"Successfully closed {arguments.target} window.",
-                    verified=True,
-                )
+                    if shutil.which("powershell"):
+                        ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
+                        subprocess.run(
+                            ["powershell", "-NoProfile", "-Command", ps_cmd],
+                            capture_output=True,
+                            timeout=3,
+                        )
+                    else:
+                        subprocess.run(
+                            f"taskkill /F /IM {proc_name}.exe",
+                            shell=True,
+                            capture_output=True,
+                            timeout=3,
+                        )
             else:
-                proc_name = target_clean.replace(".exe", "")
-                ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
-                subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", ps_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                return AppCloseOutput(
-                    target=arguments.target,
-                    status="closed",
-                    message=f"Closed process {arguments.target}.",
-                    verified=True,
-                )
+                for proc in procs:
+                    proc_name = proc.replace(".exe", "")
+                    if shutil.which("pkill"):
+                        subprocess.run(
+                            ["pkill", "-f", proc_name],
+                            capture_output=True,
+                            timeout=3,
+                        )
+
+            return AppCloseOutput(
+                target=arguments.target,
+                status="closed",
+                message=f"Successfully closed {arguments.target} on your system.",
+                verified=True,
+            )
         except Exception as exc:
             logger.warning("Failed to close application %s: %s", arguments.target, exc)
             return AppCloseOutput(

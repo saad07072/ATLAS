@@ -299,10 +299,12 @@ class ToolFrameworkTests(unittest.TestCase):
     def test_app_close_tool_execution(self) -> None:
         from backend.app.tools.system_tools import AppCloseTool, AppCloseInput
         tool = AppCloseTool()
-        result = tool.execute(AppCloseInput(target="notepad"))
-        self.assertEqual(result.target, "notepad")
-        self.assertEqual(result.status, "closed")
-        self.assertTrue(result.verified)
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = tool.execute(AppCloseInput(target="notepad"))
+            self.assertEqual(result.target, "notepad")
+            self.assertEqual(result.status, "closed")
+            self.assertTrue(result.verified)
 
     def test_all_system_tools_registered(self) -> None:
         from backend.app.tools.system_tools import get_all_system_tools
