@@ -89,12 +89,12 @@ class WebOpenTool(Tool):
                     message=f"Successfully opened {target} in your web browser.",
                 )
             except Exception as exc:
-            logger.warning("Failed to open browser URL %s: %s", target, exc)
-            return WebOpenOutput(
-                status="failed",
-                url=target,
-                message=f"Could not launch browser for {target}: {exc}",
-            )
+                logger.warning("Failed to open browser URL %s: %s", target, exc)
+                return WebOpenOutput(
+                    status="failed",
+                    url=target,
+                    message=f"Could not launch browser for {target}: {exc}",
+                )
 
 
 # ==============================================================================
