@@ -8,6 +8,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next({ request });
   }
 
+  // Fast-path: Only attempt auth session refresh if Supabase cookies actually exist
+  const hasAuthCookies = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-"));
+
+  if (!hasAuthCookies) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -24,8 +33,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     },
   });
 
-  // Refresh auth cookies if available without forcing a redirect on visit
-  await supabase.auth.getUser();
+  try {
+    // Refresh auth cookies if available with a 1.5s timeout safeguard so page loads never hang
+    await Promise.race([
+      supabase.auth.getUser(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("auth_timeout")), 1500)
+      ),
+    ]);
+  } catch {
+    // Graceful continuation if Supabase is offline or DNS is unreachable
+  }
 
   return response;
 }
