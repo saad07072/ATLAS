@@ -58,6 +58,17 @@ class WebOpenTool(Tool):
         "chatgpt": "https://chatgpt.com",
         "gemini": "https://gemini.google.com",
         "linkedin": "https://www.linkedin.com",
+        "amazon": "https://www.amazon.com",
+        "facebook": "https://www.facebook.com",
+        "instagram": "https://www.instagram.com",
+        "twitch": "https://www.twitch.tv",
+        "gmail": "https://mail.google.com",
+        "maps": "https://maps.google.com",
+        "drive": "https://drive.google.com",
+        "outlook": "https://outlook.live.com",
+        "yahoo": "https://www.yahoo.com",
+        "ebay": "https://www.ebay.com",
+        "walmart": "https://www.walmart.com",
     }
 
     def execute(self, arguments: BaseModel) -> BaseModel:
@@ -65,39 +76,42 @@ class WebOpenTool(Tool):
             raise TypeError("WebOpenTool requires WebOpenInput arguments.")
 
         target = arguments.url.strip()
-        lower = target.lower()
+        lower = target.lower().strip("/")
 
         # Resolve aliases
-        for alias, dest in self._ALIASES.items():
-            if lower == alias or lower == f"{alias}.com":
-                target = dest
-                break
-
-        if not target.startswith(("http://", "https://")):
-            target = f"https://{target}"
+        if lower in self._ALIASES:
+            target = self._ALIASES[lower]
+        elif lower.replace(".com", "") in self._ALIASES:
+            target = self._ALIASES[lower.replace(".com", "")]
+        elif lower.startswith("www.") and lower[4:] in self._ALIASES:
+            target = self._ALIASES[lower[4:]]
+        elif not target.startswith(("http://", "https://")):
+            if "." in target and " " not in target:
+                target = f"https://{target}"
+            else:
+                target = f"https://www.{lower}.com"
 
         try:
-            webbrowser.open(target, new=2, autoraise=False)
+            if sys.platform == "win32":
+                try:
+                    subprocess.Popen(f'start "" "{target}"', shell=True)
+                except Exception:
+                    webbrowser.open(target, new=2, autoraise=True)
+            else:
+                webbrowser.open(target, new=2, autoraise=True)
+
             return WebOpenOutput(
                 status="success",
                 url=target,
                 message=f"Successfully opened {target} in your web browser.",
             )
-        except Exception:
-            try:
-                subprocess.Popen(f'start "" "{target}"', shell=True)
-                return WebOpenOutput(
-                    status="success",
-                    url=target,
-                    message=f"Successfully opened {target} in your web browser.",
-                )
-            except Exception as exc:
-                logger.warning("Failed to open browser URL %s: %s", target, exc)
-                return WebOpenOutput(
-                    status="failed",
-                    url=target,
-                    message=f"Could not launch browser for {target}: {exc}",
-                )
+        except Exception as exc:
+            logger.warning("Failed to open browser URL %s: %s", target, exc)
+            return WebOpenOutput(
+                status="failed",
+                url=target,
+                message=f"Could not launch browser for {target}: {exc}",
+            )
 
 
 # ==============================================================================
@@ -239,7 +253,7 @@ class AppLaunchOutput(BaseModel):
 
 class AppLaunchTool(Tool):
     name = "system.open_app"
-    description = "Launches desktop applications on Windows (e.g. notepad, calculator, terminal, vs code, chrome, paint, explorer)."
+    description = "Launches desktop applications on Windows (e.g. notepad, calculator, terminal, vs code, chrome, paint, explorer, word, excel, spotify, discord, etc.)."
     input_schema = AppLaunchInput
     output_schema = AppLaunchOutput
     permission_required = False
@@ -256,10 +270,41 @@ class AppLaunchTool(Tool):
         "code": ["code"],
         "vscode": ["code"],
         "paint": ["mspaint.exe"],
+        "mspaint": ["mspaint.exe"],
         "explorer": ["explorer.exe"],
+        "files": ["explorer.exe"],
+        "taskmgr": ["taskmgr.exe"],
+        "task manager": ["taskmgr.exe"],
+        "control panel": ["control.exe"],
+        "control": ["control.exe"],
+        "settings": ["cmd.exe", "/c", "start", "ms-settings:"],
+        "camera": ["cmd.exe", "/c", "start", "microsoft.windows.camera:"],
+        "clock": ["cmd.exe", "/c", "start", "ms-clock:"],
+        "photos": ["cmd.exe", "/c", "start", "ms-photos:"],
+        "snipping tool": ["snippingtool.exe"],
+        "snippingtool": ["snippingtool.exe"],
+        "word": ["winword.exe"],
+        "winword": ["winword.exe"],
+        "excel": ["excel.exe"],
+        "powerpoint": ["powerpnt.exe"],
+        "ppt": ["powerpnt.exe"],
+        "onenote": ["onenote.exe"],
+        "outlook": ["outlook.exe"],
         "chrome": ["cmd.exe", "/c", "start", "chrome"],
         "edge": ["cmd.exe", "/c", "start", "msedge"],
+        "firefox": ["cmd.exe", "/c", "start", "firefox"],
+        "brave": ["cmd.exe", "/c", "start", "brave"],
+        "opera": ["cmd.exe", "/c", "start", "opera"],
         "spotify": ["cmd.exe", "/c", "start", "spotify:"],
+        "discord": ["cmd.exe", "/c", "start", "discord:"],
+        "slack": ["cmd.exe", "/c", "start", "slack:"],
+        "zoom": ["cmd.exe", "/c", "start", "zoommtg:"],
+        "teams": ["cmd.exe", "/c", "start", "msteams:"],
+        "steam": ["cmd.exe", "/c", "start", "steam:"],
+        "vlc": ["vlc.exe"],
+        "obs": ["obs64.exe"],
+        "telegram": ["cmd.exe", "/c", "start", "tg:"],
+        "whatsapp": ["cmd.exe", "/c", "start", "whatsapp:"],
     }
 
     def execute(self, arguments: BaseModel) -> BaseModel:
@@ -267,13 +312,29 @@ class AppLaunchTool(Tool):
             raise TypeError("AppLaunchTool requires AppLaunchInput arguments.")
 
         name_clean = arguments.app_name.strip().lower()
-        cmd = self._APP_MAP.get(name_clean) or [name_clean]
+        cmd = self._APP_MAP.get(name_clean)
 
         try:
-            if hasattr(os, "startfile") and name_clean in {"calc", "calculator", "notepad", "mspaint"}:
-                os.startfile(f"{name_clean}.exe" if not name_clean.endswith(".exe") else name_clean)  # type: ignore[attr-defined]
+            if cmd is not None:
+                if hasattr(os, "startfile") and name_clean in {"calc", "calculator", "notepad", "mspaint"}:
+                    os.startfile(f"{name_clean}.exe" if not name_clean.endswith(".exe") else name_clean)
+                else:
+                    subprocess.Popen(cmd, shell=True)
             else:
-                subprocess.Popen(cmd, shell=True)
+                if sys.platform == "win32":
+                    exe_name = name_clean if name_clean.endswith(".exe") else f"{name_clean}.exe"
+                    resolved = shutil.which(name_clean) or shutil.which(exe_name)
+                    if resolved:
+                        subprocess.Popen([resolved], shell=True)
+                    else:
+                        subprocess.Popen(f'start "" "{name_clean}"', shell=True)
+                else:
+                    which_cmd = shutil.which(name_clean)
+                    if which_cmd:
+                        subprocess.Popen([which_cmd])
+                    else:
+                        subprocess.Popen([name_clean])
+
             return AppLaunchOutput(
                 app_name=arguments.app_name,
                 status="launched",
@@ -491,7 +552,7 @@ class AppCloseOutput(BaseModel):
 
 class AppCloseTool(Tool):
     name = "system.close_app"
-    description = "Gracefully closes desktop applications, browser windows, or processes on Windows."
+    description = "Gracefully closes desktop applications, browser windows, tabs, or processes on Windows."
     input_schema = AppCloseInput
     output_schema = AppCloseOutput
     permission_required = False
@@ -511,7 +572,16 @@ class AppCloseTool(Tool):
         "vscode": ["Code.exe"],
         "chrome": ["chrome.exe"],
         "edge": ["msedge.exe"],
-        "browser": ["chrome.exe", "msedge.exe"],
+        "browser": ["chrome.exe", "msedge.exe", "brave.exe", "firefox.exe"],
+        "word": ["WINWORD.EXE"],
+        "excel": ["EXCEL.EXE"],
+        "powerpoint": ["POWERPNT.EXE"],
+        "spotify": ["Spotify.exe"],
+        "discord": ["Discord.exe"],
+        "vlc": ["vlc.exe"],
+        "steam": ["steam.exe"],
+        "slack": ["slack.exe"],
+        "zoom": ["Zoom.exe"],
     }
 
     def execute(self, arguments: BaseModel) -> BaseModel:
@@ -519,27 +589,50 @@ class AppCloseTool(Tool):
             raise TypeError("AppCloseTool requires AppCloseInput arguments.")
 
         target_clean = arguments.target.strip().lower()
-        procs = self._PROCESS_MAP.get(target_clean) or [target_clean]
+        is_tab_or_site = target_clean in {
+            "tab", "browser tab", "this tab", "current tab", "window", "website",
+            "youtube", "amazon", "google", "reddit", "twitter", "x", "netflix",
+            "facebook", "instagram", "twitch", "github", "wikipedia", "spotify"
+        }
 
         try:
             if sys.platform == "win32":
-                for proc in procs:
-                    proc_name = proc.replace(".exe", "")
+                if is_tab_or_site:
+                    ps_script = (
+                        f"$t = '{target_clean}'; "
+                        "$browsers = @('chrome', 'msedge', 'brave', 'firefox'); "
+                        "$p = Get-Process | Where-Object { $_.ProcessName -in $browsers -and $_.MainWindowTitle -like '*' + $t + '*' } | Select-Object -First 1; "
+                        "if (-not $p) { $p = Get-Process | Where-Object { $_.ProcessName -in $browsers -and $_.MainWindowTitle.Length -gt 0 } | Select-Object -First 1; }; "
+                        "if ($p) { $w = New-Object -ComObject WScript.Shell; $w.AppActivate($p.Id); Start-Sleep -Milliseconds 60; $w.SendKeys('^w'); }"
+                    )
                     if shutil.which("powershell"):
-                        ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
                         subprocess.run(
-                            ["powershell", "-NoProfile", "-Command", ps_cmd],
+                            ["powershell", "-NoProfile", "-Command", ps_script],
                             capture_output=True,
                             timeout=3,
                         )
                     else:
-                        subprocess.run(
-                            f"taskkill /F /IM {proc_name}.exe",
-                            shell=True,
-                            capture_output=True,
-                            timeout=3,
-                        )
+                        subprocess.run("taskkill /F /IM chrome.exe", shell=True, capture_output=True, timeout=3)
+                else:
+                    procs = self._PROCESS_MAP.get(target_clean) or [target_clean]
+                    for proc in procs:
+                        proc_name = proc.replace(".exe", "")
+                        if shutil.which("powershell"):
+                            ps_cmd = f"Stop-Process -Name '{proc_name}' -Force -ErrorAction SilentlyContinue"
+                            subprocess.run(
+                                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                                capture_output=True,
+                                timeout=3,
+                            )
+                        else:
+                            subprocess.run(
+                                f"taskkill /F /IM {proc_name}.exe",
+                                shell=True,
+                                capture_output=True,
+                                timeout=3,
+                            )
             else:
+                procs = self._PROCESS_MAP.get(target_clean) or [target_clean]
                 for proc in procs:
                     proc_name = proc.replace(".exe", "")
                     if shutil.which("pkill"):

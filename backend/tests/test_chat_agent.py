@@ -267,5 +267,47 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(secret, json.dumps(body))
 
 
+    def test_open_amazon_website_action_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.execute.return_value = ToolResult(tool_name="web.open", success=True, output={"status": "success"}, metadata=ToolExecutionMetadata(duration_ms=10.0))
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+
+        response = agent.respond(ChatRequest(message="open amazon.com"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("opened amazon.com", response.message.lower())
+        self.assertEqual(len(response.actions), 1)
+        self.assertEqual(response.actions[0].tool, "web.open")
+        self.assertEqual(response.actions[0].target, "amazon.com")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_close_tab_and_youtube_action_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.execute.return_value = ToolResult(tool_name="system.close_app", success=True, output={"status": "closed"}, metadata=ToolExecutionMetadata(duration_ms=10.0))
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+
+        response1 = agent.respond(ChatRequest(message="close tab"))
+        self.assertEqual(response1.intent, "task_request")
+        self.assertEqual(response1.actions[0].tool, "system.close_app")
+        self.assertEqual(response1.actions[0].target, "tab")
+
+        response2 = agent.respond(ChatRequest(message="close youtube"))
+        self.assertEqual(response2.intent, "task_request")
+        self.assertEqual(response2.actions[0].tool, "system.close_app")
+        self.assertEqual(response2.actions[0].target, "youtube")
+
+    def test_launch_generic_windows_app_action_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.execute.return_value = ToolResult(tool_name="system.open_app", success=True, output={"status": "launched"}, metadata=ToolExecutionMetadata(duration_ms=10.0))
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+
+        response = agent.respond(ChatRequest(message="open discord"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertEqual(response.actions[0].tool, "system.open_app")
+        self.assertEqual(response.actions[0].target, "discord")
+
+
 if __name__ == "__main__":
     unittest.main()

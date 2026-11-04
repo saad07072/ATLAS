@@ -113,6 +113,13 @@ def create_test_workflow_service() -> tuple[WorkflowService, InMemoryWorkflowRep
     return service, repository
 
 
+class FakeGoogleOAuthService:
+    def __init__(self, connected: bool = False) -> None:
+        self._connected = connected
+
+    def connection_status(self, user_id: str) -> tuple[bool, bool]:
+        return True, self._connected
+
 class SecurityHardeningTests(unittest.TestCase):
     def setUp(self) -> None:
         rate_limiter_instance.reset()
@@ -156,6 +163,7 @@ class SecurityHardeningTests(unittest.TestCase):
         # Dependency overrides
         self.current_user: UUID | None = USER_A
         self.app.dependency_overrides[get_chat_agent] = lambda: self.chat_agent
+        self.app.dependency_overrides[get_google_oauth_service] = lambda: FakeGoogleOAuthService(connected=False)
         self.app.dependency_overrides[get_conversation_service] = lambda: self.conv_service
         self.app.dependency_overrides[get_workflow_service] = lambda: self.wf_service
         self.app.dependency_overrides[get_optional_authenticated_user_id] = lambda: self.current_user

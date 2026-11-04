@@ -27,7 +27,14 @@ from backend.app.evaluation.models import (
     CaseEvaluationResult,
     EvaluationCategory,
 )
+from backend.app.integrations.google.runtime import get_google_oauth_service
 from backend.app.security.identity import get_authenticated_user_id
+
+
+class MockGoogleOAuthService:
+    def connection_status(self, user_id: str) -> tuple[bool, bool]:
+        return True, False
+
 from backend.app.security.rate_limit import InMemoryRateLimiter
 
 
@@ -268,6 +275,7 @@ def run_reliability_error_suite() -> list[CaseEvaluationResult]:
     int_app.include_router(google_router, prefix="/api/v1")
     int_app.include_router(github_router, prefix="/api/v1")
     int_app.dependency_overrides[get_authenticated_user_id] = lambda: "ef3e7347-a8e9-4d63-90cf-a21d5c855515"
+    int_app.dependency_overrides[get_google_oauth_service] = lambda: MockGoogleOAuthService()
 
     with TestClient(int_app) as client:
         g_res = client.get("/api/v1/google/status")

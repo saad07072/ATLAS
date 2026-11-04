@@ -306,6 +306,36 @@ class ToolFrameworkTests(unittest.TestCase):
             self.assertEqual(result.status, "closed")
             self.assertTrue(result.verified)
 
+    def test_app_close_tool_tab_execution(self) -> None:
+        from backend.app.tools.system_tools import AppCloseTool, AppCloseInput
+        tool = AppCloseTool()
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = tool.execute(AppCloseInput(target="youtube"))
+            self.assertEqual(result.target, "youtube")
+            self.assertEqual(result.status, "closed")
+            self.assertTrue(result.verified)
+
+    def test_web_open_tool_normalizes_amazon_domain(self) -> None:
+        from backend.app.tools.system_tools import WebOpenTool, WebOpenInput
+        tool = WebOpenTool()
+        with unittest.mock.patch("subprocess.Popen") as mock_popen:
+            res1 = tool.execute(WebOpenInput(url="amazon.com"))
+            self.assertEqual(res1.url, "https://www.amazon.com")
+            self.assertEqual(res1.status, "success")
+
+            res2 = tool.execute(WebOpenInput(url="amazon"))
+            self.assertEqual(res2.url, "https://www.amazon.com")
+            self.assertEqual(res2.status, "success")
+
+    def test_app_launch_tool_windows_app(self) -> None:
+        from backend.app.tools.system_tools import AppLaunchTool, AppLaunchInput
+        tool = AppLaunchTool()
+        with unittest.mock.patch("subprocess.Popen") as mock_popen:
+            res = tool.execute(AppLaunchInput(app_name="vlc"))
+            self.assertEqual(res.status, "launched")
+            self.assertIn("vlc", res.message)
+
     def test_all_system_tools_registered(self) -> None:
         from backend.app.tools.system_tools import get_all_system_tools
         tools = get_all_system_tools()

@@ -15,8 +15,8 @@ from backend.app.tools.models import ToolExecutionRequest, ToolResult
 
 MAX_RESPONSE_CHARACTERS = 8000
 CAPABILITIES_RESPONSE = (
-    "I can answer questions, help plan tasks, open websites, launch desktop applications, "
-    "check real-time weather, execute system tasks, and use context from this conversation. "
+    "I can answer questions, open and close any website or browser tab, launch any desktop application on your Windows PC, "
+    "check live weather, execute shell commands, and control system tasks with verified proof. "
     "I cannot perform actions that are unconfirmed destructive operations or physical purchases without authorization."
 )
 CLARIFICATION_RESPONSE = "Could you clarify what you would like me to help with?"
@@ -252,13 +252,15 @@ class ChatAgent:
                 ),
             )
 
-        # 2. Close Application / Window / Website
+        # 2. Close Application / Window / Website / Tab
         close_match = re.search(
-            r"\b(?:close|quit|exit|terminate|kill|shut down)\s+(?:the\s+)?(?:website\s+|window\s+|tab\s+|app\s+|application\s+)?(youtube|google|github|notepad|calculator|calc|paint|mspaint|terminal|cmd|powershell|chrome|edge|browser|window|tab)\b",
+            r"\b(?:close|quit|exit|terminate|kill|shut down)\s+(?:the\s+)?(?:website\s+|window\s+|browser\s+tab\s+|tab\s+|app\s+|application\s+)?([a-zA-Z0-9_.-]+(?:\s+[a-zA-Z0-9_.-]+)?)\b",
             clean_lower,
         )
         if close_match:
-            target = close_match.group(1)
+            target = close_match.group(1).strip()
+            if target in {"this tab", "current tab", "the tab"}:
+                target = "tab"
             result = self.execute_tool_request(ToolExecutionRequest(name="system.close_app", arguments={"target": target}))
             target_disp = target.capitalize()
             if result.success:
@@ -277,7 +279,7 @@ class ChatAgent:
                 )
             return ChatResponse(
                 intent="task_request",
-                message=f"I could not close {target_disp}, sir: {result.error or 'Process not found'}",
+                message=f"I could not close {target_disp}, sir: {result.error or 'Process or tab not found'}",
                 actions=[
                     ActionExecutionRecord(
                         tool="system.close_app",
@@ -291,7 +293,7 @@ class ChatAgent:
 
         # 3. Website Open Execution
         open_web_match = re.search(
-            r"\b(?:open|launch|go to|browse to)\s+(?:the\s+)?(?:website\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|youtube|google|github|reddit|twitter|spotify|netflix|wikipedia|chatgpt|gemini|linkedin)\b",
+            r"\b(?:open|launch|go to|browse to|visit)\s+(?:the\s+)?(?:website\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|youtube|google|github|reddit|twitter|x|spotify|netflix|wikipedia|chatgpt|gemini|linkedin|amazon|facebook|instagram|twitch|gmail|maps|drive|outlook|yahoo|ebay|walmart)\b",
             clean_lower,
         )
         if open_web_match:
@@ -376,9 +378,9 @@ class ChatAgent:
                 ],
             )
 
-        # 5. Desktop Application Launch
+        # 5. Desktop Application Launch (Supports any application on Windows)
         app_match = re.search(
-            r"\b(?:open|launch|start)\s+(?:the\s+)?(notepad|calculator|calc|terminal|cmd|powershell|vscode|code|paint|explorer|spotify|chrome|edge)\b",
+            r"\b(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+|application\s+|program\s+)?([a-zA-Z0-9_.-]+(?:\s+[a-zA-Z0-9_.-]+)?)\b",
             clean_lower,
         )
         if app_match:
