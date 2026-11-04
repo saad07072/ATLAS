@@ -309,5 +309,40 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].target, "discord")
 
 
+    def test_live_sports_query_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="web.search",
+            success=True,
+            output={"summary": "Live score: India 187/6 in 38 overs vs New Zealand", "status": "success"},
+            metadata=ToolExecutionMetadata(duration_ms=10.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+
+        response = agent.respond(ChatRequest(message="India versus New Zealand"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("India 187/6", response.message)
+        self.assertEqual(response.actions[0].tool, "web.search")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_screen_vision_requested_when_no_image(self) -> None:
+        agent = ChatAgent(self.provider)
+        response = agent.respond(ChatRequest(message="can you able to see my screen"))
+        self.assertEqual(response.intent, "conversation")
+        self.assertIn("SHARE SCREEN", response.message)
+        self.assertEqual(response.actions[0].tool, "screen.inspect")
+        self.assertEqual(response.actions[0].status, "requested")
+
+    def test_screen_vision_executed_when_image_present(self) -> None:
+        self.provider.generate.return_value = Mock(content="I see VS Code with TypeScript files, sir.")
+        agent = ChatAgent(self.provider)
+        response = agent.respond(ChatRequest(message="can you see my screen", image_data="data:image/jpeg;base64,abc123fake"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("VS Code", response.message)
+        self.assertEqual(response.actions[0].tool, "screen.inspect")
+        self.assertEqual(response.actions[0].status, "success")
+
+
 if __name__ == "__main__":
     unittest.main()

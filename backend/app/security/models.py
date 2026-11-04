@@ -19,6 +19,7 @@ class PermissionId(StrEnum):
     GITHUB_PULL_REQUEST_WRITE = "github.pull_request.write"
     GITHUB_CODE_WRITE = "github.code.write"
     WEB_OPEN = "web.open"
+    WEB_SEARCH = "web.search"
     WEATHER_GET = "weather.get"
     SYSTEM_OPEN_APP = "system.open_app"
     SYSTEM_RUN_COMMAND = "system.run_command"

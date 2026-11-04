@@ -59,6 +59,10 @@ export function AtlasCore(): JSX.Element {
     activeVoice: "Detecting neural voice...",
   });
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
+  const [isScreenShared, setIsScreenShared] = useState(false);
+  const [textInput, setTextInput] = useState("");
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const [lastAction, setLastAction] = useState<ActionRecord | null>(null);
   const [actionTimer, setActionTimer] = useState<number>(0);
   const actionTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -236,6 +240,90 @@ export function AtlasCore(): JSX.Element {
     window.speechSynthesis.speak(utterance);
   }, [startRecognitionSafe]);
 
+  // Screen Streaming & Multimodal Vision Helpers
+  const stopScreenShare = useCallback(() => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
+    }
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = null;
+    }
+    setIsScreenShared(false);
+  }, []);
+
+  const startScreenShare = useCallback(async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getDisplayMedia) {
+        alert("Screen sharing is not supported by your current browser environment.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          displaySurface: "monitor",
+        },
+        audio: false,
+      });
+      screenStreamRef.current = stream;
+
+      const video = document.createElement("video");
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      video.srcObject = stream;
+      screenVideoRef.current = video;
+      await video.play().catch(() => {});
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.onended = () => {
+          stopScreenShare();
+        };
+      }
+
+      setIsScreenShared(true);
+      const conf = "Visual display link established, sir. I am now observing your screen in real time.";
+      setAtlasResponse(conf);
+      speakAtlas(conf);
+    } catch (err) {
+      console.warn("Screen sharing permission declined or cancelled:", err);
+    }
+  }, [speakAtlas, stopScreenShare]);
+
+  const toggleScreenShare = useCallback(() => {
+    if (isScreenShared) {
+      stopScreenShare();
+    } else {
+      void startScreenShare();
+    }
+  }, [isScreenShared, startScreenShare, stopScreenShare]);
+
+  const captureScreenFrame = useCallback((): string | null => {
+    if (!screenStreamRef.current || !screenStreamRef.current.active) return null;
+    const video = screenVideoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+
+    try {
+      const canvas = document.createElement("canvas");
+      const maxDim = 1280;
+      let w = video.videoWidth;
+      let h = video.videoHeight;
+      if (w > maxDim) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
+      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, w, h);
+      return canvas.toDataURL("image/jpeg", 0.75);
+    } catch (e) {
+      console.warn("Screen frame capture error:", e);
+      return null;
+    }
+  }, []);
+
   // -------------------------------------------------------------
   // 3. Backend Agent Request Dispatcher
   // -------------------------------------------------------------
@@ -300,12 +388,15 @@ export function AtlasCore(): JSX.Element {
         // ignore
       }
 
+      const screenFrame = captureScreenFrame();
+
       try {
         const data = await sendChatMessage(
           query,
           [],
           conversationIdRef.current,
           controller.signal,
+          screenFrame,
         );
 
         if (actionTimerIntervalRef.current) {
@@ -350,7 +441,7 @@ export function AtlasCore(): JSX.Element {
         speakAtlas(errorReply);
       }
     },
-    [speakAtlas, startRecognitionSafe],
+    [captureScreenFrame, speakAtlas, startRecognitionSafe],
   );
 
   // -------------------------------------------------------------
@@ -836,19 +927,37 @@ export function AtlasCore(): JSX.Element {
           <span>PERMISSIONS:</span>
           <span className="hud-val">SHA-256 VERIFIED</span>
         </div>
+        <div className="hud-telemetry-row right-aligned">
+          <span>VISION STREAM:</span>
+          <span className={`hud-val ${isScreenShared ? "state-speaking" : ""}`}>
+            {isScreenShared ? "LINKED (ACTIVE)" : "OFFLINE"}
+          </span>
+        </div>
 
-        {/* Minimalist Switch to System Console (Discreet Drawer) */}
-        <button
-          type="button"
-          className="hud-console-trigger"
-          onClick={(e) => {
-            e.stopPropagation();
-            setHudConsoleOpen(!hudConsoleOpen);
-          }}
-          title="Toggle System Management Console"
-        >
-          {hudConsoleOpen ? "[ HIDE CONSOLE ]" : "[ SYSTEM CONSOLE ]"}
-        </button>
+        <div className="hud-buttons-row">
+          <button
+            type="button"
+            className={`hud-console-trigger ${isScreenShared ? "vision-active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleScreenShare();
+            }}
+            title="Share display stream with ATLAS neural vision core"
+          >
+            {isScreenShared ? "[ 👁️ SCREEN LINKED ]" : "[ 👁️ SHARE SCREEN ]"}
+          </button>
+          <button
+            type="button"
+            className="hud-console-trigger"
+            onClick={(e) => {
+              e.stopPropagation();
+              setHudConsoleOpen(!hudConsoleOpen);
+            }}
+            title="Toggle System Management Console"
+          >
+            {hudConsoleOpen ? "[ HIDE CONSOLE ]" : "[ SYSTEM CONSOLE ]"}
+          </button>
+        </div>
       </div>
 
       {/* 4. Bottom-Left Audio Level VU Meter */}
@@ -928,6 +1037,44 @@ export function AtlasCore(): JSX.Element {
           </div>
           <p className="dialogue-text">{atlasResponse}</p>
         </div>
+
+        {/* Sleek Liquid-Glass Quick Command Bar */}
+        <form
+          className="atlas-command-bar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const q = textInput.trim();
+            if (q) {
+              setTextInput("");
+              setTranscript(q);
+              void sendToAtlas(q);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="text"
+            className="atlas-command-input"
+            placeholder="Type a command or query, or speak naturally (e.g. 'India versus New Zealand', 'can you see my screen')..."
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="atlas-command-submit"
+            disabled={!textInput.trim() || atlasState === "processing"}
+          >
+            EXECUTE
+          </button>
+          <button
+            type="button"
+            className={`atlas-screen-toggle-btn ${isScreenShared ? "active" : ""}`}
+            onClick={toggleScreenShare}
+            title={isScreenShared ? "Screen Linked - Click to disconnect" : "Share screen with ATLAS"}
+          >
+            {isScreenShared ? "👁️ LINKED" : "👁️ SCREEN"}
+          </button>
+        </form>
 
         {/* Prompt Cue */}
         <div className="atlas-cue">

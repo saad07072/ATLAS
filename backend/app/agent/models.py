@@ -40,6 +40,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     history: list[ChatHistoryMessage] = Field(default_factory=list, max_length=12)
     conversation_id: UUID | None = None
+    image_data: str | None = Field(default=None, max_length=5000000)
 
     @field_validator("message")
     @classmethod

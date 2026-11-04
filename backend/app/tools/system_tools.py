@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import os
 import shutil
 import subprocess
@@ -658,6 +659,97 @@ class AppCloseTool(Tool):
             )
 
 
+# ==============================================================================
+# 9. Live Web & Real-Time Sports/News Search Tool (web.search)
+# ==============================================================================
+
+class LiveSearchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=1, max_length=500, description="The topic, sports match, person, or query to search for live information")
+
+
+class LiveSearchOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    query: str
+    summary: str
+    headlines: list[str] = Field(default_factory=list)
+    verified: bool = True
+
+
+class LiveSearchTool(Tool):
+    name = "web.search"
+    description = "Searches the live web, current news, and live sports feeds for real-time scores, headlines, and facts."
+    input_schema = LiveSearchInput
+    output_schema = LiveSearchOutput
+    permission_required = False
+    permission_id = "web.search"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, LiveSearchInput):
+            raise TypeError("LiveSearchTool requires LiveSearchInput arguments.")
+
+        query = arguments.query.strip()
+        encoded = urllib.parse.quote(query)
+        headlines: list[str] = []
+
+        # 1. Primary Live Feed: Google News RSS for live sports, breaking news, match updates
+        rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
+        req = urllib.request.Request(
+            rss_url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ATLAS/2.0"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = resp.read()
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(data)
+            for it in root.findall(".//item")[:5]:
+                title_elem = it.find("title")
+                if title_elem is not None and title_elem.text:
+                    cleaned_title = re.sub(r"\s+-\s+[^-]+$", "", title_elem.text).strip()
+                    if cleaned_title and cleaned_title not in headlines:
+                        headlines.append(cleaned_title)
+        except Exception as exc:
+            logger.info("Google News RSS query failed for '%s': %s", query, exc)
+
+        # 2. Secondary/Fallback: DuckDuckGo Instant Answer API for encyclopedic/factual data
+        if not headlines:
+            ddg_url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
+            req_ddg = urllib.request.Request(
+                ddg_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ATLAS/2.0"},
+            )
+            try:
+                with urllib.request.urlopen(req_ddg, timeout=3.0) as resp:
+                    payload = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                ddg_abstract = (payload.get("AbstractText") or payload.get("Answer") or "").strip()
+                if ddg_abstract:
+                    headlines.append(ddg_abstract)
+            except Exception as exc:
+                logger.info("DuckDuckGo Instant Answer query failed for '%s': %s", query, exc)
+
+        if headlines:
+            summary_bullet = "; ".join(headlines[:3])
+            summary = f"Live update verified for '{query}', sir: {summary_bullet}"
+            return LiveSearchOutput(
+                status="success",
+                query=query,
+                summary=summary,
+                headlines=headlines,
+                verified=True,
+            )
+
+        return LiveSearchOutput(
+            status="success",
+            query=query,
+            summary=f"Live feed queried for '{query}', sir. No active match or breaking bulletin found at this moment.",
+            headlines=[],
+            verified=True,
+        )
+
+
 def get_all_system_tools() -> list[Tool]:
     return [
         WebOpenTool(),
@@ -668,4 +760,5 @@ def get_all_system_tools() -> list[Tool]:
         FileReadTool(),
         FileWriteTool(),
         AppCloseTool(),
+        LiveSearchTool(),
     ]

@@ -2159,3 +2159,106 @@ img {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 240, 255, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.5);
 }
 
+
+/* ATLAS Neural Screen Vision & Quick Command Bar */
+.hud-buttons-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  justify-content: flex-end;
+}
+
+.hud-console-trigger.vision-active {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.45) !important;
+}
+
+.atlas-command-bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 1.1rem;
+  background: rgba(2, 14, 28, 0.82);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  border-radius: 9999px;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 14px rgba(0, 240, 255, 0.08);
+  pointer-events: auto;
+  transition: all 0.25s ease;
+}
+
+.atlas-command-bar:focus-within {
+  border-color: #00f0ff;
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 240, 255, 0.35);
+}
+
+.atlas-command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.atlas-command-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+.atlas-command-submit {
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  color: #00f0ff;
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.atlas-command-submit:hover:not(:disabled) {
+  background: #00f0ff;
+  color: #020e1c;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+}
+
+.atlas-command-submit:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.atlas-screen-toggle-btn {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  color: #00f0ff;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.atlas-screen-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.25) !important;
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.5) !important;
+}
+
+.atlas-screen-toggle-btn:hover {
+  transform: scale(1.03);
+}

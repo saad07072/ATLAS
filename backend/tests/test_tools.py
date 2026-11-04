@@ -336,6 +336,23 @@ class ToolFrameworkTests(unittest.TestCase):
             self.assertEqual(res.status, "launched")
             self.assertIn("vlc", res.message)
 
+    def test_live_search_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import LiveSearchTool, LiveSearchInput
+        tool = LiveSearchTool()
+        with unittest.mock.patch("urllib.request.urlopen") as mock_url:
+            mock_resp = Mock()
+            mock_resp.read.return_value = b"""<rss><channel>
+                <item><title>IND vs NZ 1st ODI Live: India wins by 4 wickets - News</title></item>
+            </channel></rss>"""
+            mock_resp.__enter__ = Mock(return_value=mock_resp)
+            mock_resp.__exit__ = Mock(return_value=None)
+            mock_url.return_value = mock_resp
+
+            res = tool.execute(LiveSearchInput(query="India versus New Zealand"))
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+            self.assertIn("IND vs NZ", res.summary)
+
     def test_all_system_tools_registered(self) -> None:
         from backend.app.tools.system_tools import get_all_system_tools
         tools = get_all_system_tools()
@@ -345,6 +362,7 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertIn("weather.get", names)
         self.assertIn("system.open_app", names)
         self.assertIn("system.datetime", names)
+        self.assertIn("web.search", names)
 
 
 if __name__ == "__main__":

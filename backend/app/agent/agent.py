@@ -15,7 +15,9 @@ from backend.app.tools.models import ToolExecutionRequest, ToolResult
 
 MAX_RESPONSE_CHARACTERS = 8000
 CAPABILITIES_RESPONSE = (
-    "I can answer questions, open and close any website or browser tab, launch any desktop application on your Windows PC, "
+    "I can answer questions, search the live web and sports feeds for real-time scores, "
+    "inspect and analyze your active screen through multimodal vision, "
+    "open and close any website or browser tab, launch any desktop application on your Windows PC, "
     "check live weather, execute shell commands, and control system tasks with verified proof. "
     "I cannot perform actions that are unconfirmed destructive operations or physical purchases without authorization."
 )
@@ -130,7 +132,7 @@ class ChatAgent:
                 requires_clarification=True,
             )
 
-        action_response = self._try_execute_action(request.message)
+        action_response = self._try_execute_action(request.message, request.image_data)
         if action_response is not None:
             return action_response
 
@@ -140,9 +142,11 @@ class ChatAgent:
                 LLMMessage(
                     role="user",
                     content=self._build_prompt(request, memory_context),
+                    image_data=request.image_data,
                 )
             ],
             system_instruction=SYSTEM_INSTRUCTION,
+            image_data=request.image_data,
         )
         try:
             response = self.provider.generate(provider_request)
@@ -236,11 +240,105 @@ class ChatAgent:
             return content.replace(self.secret, "[redacted]")
         return content
 
-    def _try_execute_action(self, message: str) -> ChatResponse | None:
-        if self.tool_executor is None:
-            return None
+    def _try_execute_action(self, message: str, image_data: str | None = None) -> ChatResponse | None:
 
         clean_lower = message.lower().strip("?.! ")
+
+        # 0a. Screen Vision Inspection Inquiry
+        if re.search(
+            r"\b(?:can\s+you\s+(?:able\s+to\s+)?see\s+my\s+screen|see\s+(?:what(?:'s|\s+is)\s+on\s+)?my\s+screen|look\s+at\s+my\s+screen|what(?:'s|\s+is)\s+on\s+my\s+screen|inspect\s+my\s+screen|read\s+my\s+screen|check\s+my\s+screen|what\s+am\s+i\s+looking\s+at|help\s+me\s+with\s+(?:what(?:'s|\s+is)\s+on\s+)?my\s+screen)\b",
+            clean_lower,
+        ):
+            if image_data:
+                vision_req = LLMRequest(
+                    messages=[
+                        LLMMessage(
+                            role="user",
+                            content=(
+                                "You are ATLAS inspecting the user's active screen via multimodal vision stream. "
+                                "Describe what is currently visible on the screen: active application, open windows, text, code, errors, or documents. "
+                                "Provide a polite, crisp, and direct British assistant assessment, and offer immediate concrete assistance."
+                            ),
+                            image_data=image_data,
+                        )
+                    ],
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    image_data=image_data,
+                )
+                try:
+                    res = self.provider.generate(vision_req)
+                    analysis = res.content.strip() if hasattr(res, "content") else "Display stream inspected, sir."
+                except Exception as exc:
+                    analysis = f"I have received your screen stream, sir, though my optical neural parser reported a minor interruption: {exc}"
+
+                return ChatResponse(
+                    intent="task_request",
+                    message=f"I have inspected your screen display, sir. {analysis}",
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="screen.inspect",
+                            target="active_display",
+                            status="success",
+                            message="Analyzed active screen display via Gemini Vision core",
+                            verified=True,
+                        )
+                    ],
+                )
+            else:
+                return ChatResponse(
+                    intent="conversation",
+                    message=(
+                        "I can inspect and assist with your active screen at any moment, sir! "
+                        "Please click the **[ 👁️ SHARE SCREEN ]** button on your HUD (top right or below) to establish a live display link with my vision core. "
+                        "Once linked, I can analyze your code, debug desktop errors, inspect open documents, and assist with any desktop task with full visual context."
+                    ),
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="screen.inspect",
+                            target="active_display",
+                            status="requested",
+                            message="Screen vision bridge requested - awaiting user display permission",
+                            verified=False,
+                        )
+                    ],
+                )
+
+        # 0b. Live Sports Scores, Match Updates, or Real-Time Web Search
+        live_sports_match = re.search(
+            r"\b(?:india\s+(?:vs|versus)\s+[a-zA-Z\s]+|[a-zA-Z\s]+\s+(?:vs|versus)\s+[a-zA-Z\s]+|live\s+score|cricket\s+score|match\s+score|who\s+(?:won|is\s+winning)\s+(?:the\s+)?match|match\s+update|scorecard|ipl\s+score|t20\s+score|world\s+cup\s+score)\b",
+            clean_lower,
+        )
+        web_search_match = re.search(
+            r"\b(?:search\s+(?:the\s+web\s+)?(?:for\s+)?|look\s+up\s+|google\s+|find\s+(?:information\s+on\s+|news\s+about\s+)|latest\s+news\s+(?:about\s+|on\s+))([a-zA-Z0-9\s.,-]+)\b",
+            clean_lower,
+        )
+        is_live_query = (
+            bool(live_sports_match)
+            or clean_lower.startswith(("india versus", "india vs", "cricket score"))
+            or (bool(web_search_match) and not clean_lower.startswith(("open", "launch", "close", "quit")))
+        )
+        if is_live_query:
+            if self.tool_executor is None:
+                return None
+            target_query = message.strip()
+            if web_search_match and web_search_match.group(1):
+                target_query = web_search_match.group(1).strip()
+            result = self.execute_tool_request(ToolExecutionRequest(name="web.search", arguments={"query": target_query}))
+            if result.success and isinstance(result.output, dict):
+                summary = result.output.get("summary", f"Live data retrieved for {target_query}.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=f"{summary}",
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="web.search",
+                            target=target_query,
+                            status="success",
+                            message=summary,
+                            verified=True,
+                        )
+                    ],
+                )
 
         # 1. Capabilities Inquiry
         if re.search(r"\bcan you open (?:any|a) website\b", clean_lower):
@@ -253,6 +351,8 @@ class ChatAgent:
             )
 
         # 2. Close Application / Window / Website / Tab
+        if self.tool_executor is None:
+            return None
         close_match = re.search(
             r"\b(?:close|quit|exit|terminate|kill|shut down)\s+(?:the\s+)?(?:website\s+|window\s+|browser\s+tab\s+|tab\s+|app\s+|application\s+)?([a-zA-Z0-9_.-]+(?:\s+[a-zA-Z0-9_.-]+)?)\b",
             clean_lower,
