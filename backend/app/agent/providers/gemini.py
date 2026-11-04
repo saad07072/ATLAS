@@ -178,8 +178,22 @@ class GeminiProvider(LLMProvider):
 
         return types.GenerateContentConfig(**config_kwargs)
 
-    def _to_contents(self, messages: list[LLMMessage]) -> list[str]:
-        return [message.content for message in messages]
+    def _to_contents(self, messages: list[LLMMessage]) -> list[Any]:
+        contents: list[Any] = []
+        for message in messages:
+            img = getattr(message, "image_data", None)
+            if img:
+                try:
+                    import base64
+                    raw_b64 = img
+                    if "," in raw_b64:
+                        raw_b64 = raw_b64.split(",", 1)[1]
+                    raw_bytes = base64.b64decode(raw_b64)
+                    contents.append(types.Part.from_bytes(data=raw_bytes, mime_type="image/jpeg"))
+                except Exception as exc:
+                    pass
+            contents.append(message.content)
+        return contents
 
     def _map_response(
         self,

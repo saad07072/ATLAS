@@ -26,12 +26,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function toSafeAuthError(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "Authentication is temporarily unavailable.";
-}
-
 function applySession(
   session: Session | null,
   setStatus: (status: AuthStatus) => void,
@@ -43,17 +37,14 @@ function applySession(
 
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
   const [status, setStatus] = useState<AuthStatus>(() =>
-    isSupabaseConfigured() ? "loading" : "error",
+    isSupabaseConfigured() ? "loading" : "unauthenticated",
   );
   const [email, setEmail] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(() =>
-    isSupabaseConfigured() ? null : "Supabase authentication is not configured.",
-  );
+  const [error, setError] = useState<string | null>(null);
 
   const refreshSession = useCallback(async (): Promise<void> => {
     if (!isSupabaseConfigured()) {
-      setStatus("error");
-      setError("Supabase authentication is not configured.");
+      setStatus("unauthenticated");
       return;
     }
     try {
@@ -64,10 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       }
       applySession(data.session, setStatus, setEmail);
       setError(null);
-    } catch (sessionError) {
-      setStatus("error");
+    } catch {
+      setStatus("unauthenticated");
       setEmail(null);
-      setError(toSafeAuthError(sessionError));
     }
   }, []);
 
@@ -93,17 +83,15 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
           return;
         }
         if (sessionError) {
-          setStatus("error");
-          setError(toSafeAuthError(sessionError));
+          setStatus("unauthenticated");
           return;
         }
         applySession(data.session, setStatus, setEmail);
         setError(null);
       })
-      .catch((sessionError: unknown) => {
+      .catch(() => {
         if (active) {
-          setStatus("error");
-          setError(toSafeAuthError(sessionError));
+          setStatus("unauthenticated");
         }
       });
     return () => {
@@ -129,8 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     if (signOutError) {
       throw new Error("Could not sign out. Please try again.");
     }
-    setEmail(null);
     setStatus("unauthenticated");
+    setEmail(null);
+    setError(null);
   }, []);
 
   const value = useMemo(
@@ -142,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       signOut,
       refreshSession,
     }),
-    [status, email, error, signInWithMagicLink, signOut, refreshSession],
+    [email, error, refreshSession, signInWithMagicLink, signOut, status],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -151,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used inside AuthProvider.");
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

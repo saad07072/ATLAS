@@ -25,9 +25,13 @@ export async function getSupabaseAccessToken(): Promise<string | null> {
   if (!isSupabaseConfigured()) {
     return null;
   }
-  const { data, error } = await getSupabaseBrowserClient().auth.getSession();
-  if (error) {
-    throw new Error("Could not verify the current sign-in session.");
+  try {
+    const { data, error } = await getSupabaseBrowserClient().auth.getSession();
+    if (error) {
+      return null;
+    }
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
   }
-  return data.session?.access_token ?? null;
 }

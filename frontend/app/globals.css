@@ -1947,3 +1947,318 @@ img {
   background: rgba(239, 68, 68, 0.4);
   color: #fff;
 }
+
+
+/* ========================================================================= */
+/* ATLAS LIQUID-GLASS FUTURISTIC DESIGN SYSTEM                               */
+/* ========================================================================= */
+
+.liquid-glass {
+  background: radial-gradient(135% 135% at 50% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 60%, rgba(0, 240, 255, 0.04) 100%);
+  backdrop-filter: blur(28px) saturate(190%) contrast(105%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(105%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.45);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.22);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 30px rgba(0, 240, 255, 0.15), inset 0 1px 2px 0 rgba(255, 255, 255, 0.4);
+}
+
+.liquid-glass-pill {
+  background: radial-gradient(120% 120% at 50% 0%, rgba(255, 255, 255, 0.16) 0%, rgba(10, 30, 50, 0.5) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-top: 1.2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 0 16px rgba(0, 240, 255, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Enhanced Viewport with Cosmic Liquid Glass Depth */
+.atlas-viewport,
+.jarvis-viewport {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #091f3a 0%, #040e1c 55%, #01050d 100%);
+  color: #00f0ff;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+  user-select: none;
+  z-index: 50;
+}
+
+/* Top-Left Telemetry with Liquid Glass Backing */
+.atlas-hud-top-left,
+.jarvis-hud-top-left {
+  position: absolute;
+  top: 2rem;
+  left: 2.2rem;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.9rem 1.3rem;
+  border-radius: 16px;
+  background: radial-gradient(120% 120% at 30% 0%, rgba(255, 255, 255, 0.08) 0%, rgba(2, 12, 24, 0.6) 100%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1.2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+/* Top-Right Audio & Diagnostics with Liquid Glass Backing */
+.atlas-hud-top-right,
+.jarvis-hud-top-right {
+  position: absolute;
+  top: 2rem;
+  right: 2.2rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.9rem 1.3rem;
+  border-radius: 16px;
+  background: radial-gradient(120% 120% at 70% 0%, rgba(255, 255, 255, 0.08) 0%, rgba(2, 12, 24, 0.6) 100%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1.2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+/* Dialogue Bubble Liquid Glass Transformation */
+.dialogue-bubble {
+  width: 100%;
+  border-radius: 18px;
+  padding: 1.25rem 1.8rem;
+  backdrop-filter: blur(32px) saturate(190%) contrast(105%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%) contrast(105%);
+  animation: hudFadeIn 0.3s ease;
+  pointer-events: auto;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dialogue-bubble.user-stream {
+  background: radial-gradient(120% 120% at 50% 0%, rgba(0, 160, 255, 0.18) 0%, rgba(1, 22, 48, 0.72) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-top: 1.5px solid rgba(130, 230, 255, 0.65);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.55), 0 0 25px rgba(0, 240, 255, 0.18), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+.dialogue-bubble.atlas-stream,
+.dialogue-bubble.jarvis-stream {
+  background: radial-gradient(135% 135% at 50% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(1, 14, 32, 0.88) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.42);
+  border-top: 1.6px solid rgba(255, 255, 255, 0.75);
+  border-bottom: 1.2px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 35px rgba(0, 240, 255, 0.25), inset 0 1px 2px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Liquid Glass Action Outcome Pill */
+.action-outcome-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 1.25rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  animation: hudFadeIn 0.3s ease;
+  pointer-events: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.45);
+  transition: all 0.2s ease;
+}
+
+.action-outcome-pill.success {
+  background: radial-gradient(120% 120% at 50% 0%, rgba(16, 185, 129, 0.35) 0%, rgba(6, 44, 32, 0.75) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.7);
+  border-top: 1.4px solid rgba(110, 231, 183, 0.85);
+  color: #34d399;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(16, 185, 129, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.45);
+}
+
+.action-outcome-pill.failed {
+  background: radial-gradient(120% 120% at 50% 0%, rgba(239, 68, 68, 0.35) 0%, rgba(55, 12, 12, 0.75) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  border-top: 1.4px solid rgba(252, 165, 165, 0.85);
+  color: #f87171;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(239, 68, 68, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.45);
+}
+
+/* Liquid Glass Task Progress HUD */
+.task-progress-hud {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.55rem 1.3rem;
+  border-radius: 9999px;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(139, 92, 246, 0.32) 0%, rgba(28, 12, 58, 0.75) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.65);
+  border-top: 1.4px solid rgba(196, 181, 253, 0.85);
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  color: #ddd6fe;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  animation: hudFadeIn 0.25s ease;
+  pointer-events: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 25px rgba(139, 92, 246, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Liquid Glass Console Drawer */
+.atlas-console-drawer,
+.jarvis-console-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(460px, 92vw);
+  height: 100%;
+  background: radial-gradient(135% 100% at 100% 0%, rgba(255, 255, 255, 0.08) 0%, rgba(2, 10, 22, 0.94) 60%);
+  border-left: 1.5px solid rgba(255, 255, 255, 0.25);
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(0, 240, 255, 0.15), inset 1px 0 2px rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(36px) saturate(190%);
+  -webkit-backdrop-filter: blur(36px) saturate(190%);
+  z-index: 40;
+  padding: 2.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  pointer-events: auto;
+  animation: slideDrawer 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.console-card {
+  padding: 1.15rem 1.3rem;
+  border-radius: 14px;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, rgba(0, 240, 255, 0.03) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1.2px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  text-decoration: none;
+  display: block;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+}
+
+.console-card:hover {
+  background: radial-gradient(120% 120% at 50% 0%, rgba(0, 240, 255, 0.18) 0%, rgba(2, 20, 40, 0.6) 100%);
+  border-color: rgba(0, 240, 255, 0.6);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  transform: translateX(-6px) scale(1.01);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 240, 255, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+
+/* ATLAS Neural Screen Vision & Quick Command Bar */
+.hud-buttons-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  justify-content: flex-end;
+}
+
+.hud-console-trigger.vision-active {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.45) !important;
+}
+
+.atlas-command-bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 1.1rem;
+  background: rgba(2, 14, 28, 0.82);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  border-radius: 9999px;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 14px rgba(0, 240, 255, 0.08);
+  pointer-events: auto;
+  transition: all 0.25s ease;
+}
+
+.atlas-command-bar:focus-within {
+  border-color: #00f0ff;
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 240, 255, 0.35);
+}
+
+.atlas-command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.atlas-command-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+.atlas-command-submit {
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.5);
+  color: #00f0ff;
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.atlas-command-submit:hover:not(:disabled) {
+  background: #00f0ff;
+  color: #020e1c;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+}
+
+.atlas-command-submit:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.atlas-screen-toggle-btn {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  color: #00f0ff;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.atlas-screen-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.25) !important;
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.5) !important;
+}
+
+.atlas-screen-toggle-btn:hover {
+  transform: scale(1.03);
+}

@@ -99,6 +99,7 @@ def chat(
                 message=request.message,
                 conversation_id=conversation.id,
                 history=history,
+                image_data=request.image_data,
             ),
             memory_user_id=user_id_text,
         )

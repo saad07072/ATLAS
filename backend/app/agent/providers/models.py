@@ -24,6 +24,7 @@ class LLMHealthStatus(BaseModel):
 class LLMMessage(BaseModel):
     role: Role = "user"
     content: str
+    image_data: str | None = None
 
 
 class LLMToolDefinition(BaseModel):
@@ -48,6 +49,7 @@ class LLMRequest(BaseModel):
 
     messages: list[LLMMessage] = Field(default_factory=list)
     system_instruction: str | None = None
+    image_data: str | None = None
     model: str | None = None
     temperature: float = 0.2
     max_output_tokens: int | None = None

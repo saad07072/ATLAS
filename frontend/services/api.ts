@@ -128,6 +128,7 @@ export async function sendChatMessage(
   history: ChatHistoryMessage[] = [],
   conversationId?: string,
   signal?: AbortSignal,
+  imageData?: string | null,
 ): Promise<ChatApiResponse> {
   return request<ChatApiResponse>("/api/v1/chat", {
     method: "POST",
@@ -138,6 +139,7 @@ export async function sendChatMessage(
     body: JSON.stringify({
       message,
       ...(conversationId ? { conversation_id: conversationId } : { history }),
+      ...(imageData ? { image_data: imageData } : {}),
     }),
   });
 }

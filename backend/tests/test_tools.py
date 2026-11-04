@@ -306,6 +306,53 @@ class ToolFrameworkTests(unittest.TestCase):
             self.assertEqual(result.status, "closed")
             self.assertTrue(result.verified)
 
+    def test_app_close_tool_tab_execution(self) -> None:
+        from backend.app.tools.system_tools import AppCloseTool, AppCloseInput
+        tool = AppCloseTool()
+        with unittest.mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = tool.execute(AppCloseInput(target="youtube"))
+            self.assertEqual(result.target, "youtube")
+            self.assertEqual(result.status, "closed")
+            self.assertTrue(result.verified)
+
+    def test_web_open_tool_normalizes_amazon_domain(self) -> None:
+        from backend.app.tools.system_tools import WebOpenTool, WebOpenInput
+        tool = WebOpenTool()
+        with unittest.mock.patch("subprocess.Popen") as mock_popen:
+            res1 = tool.execute(WebOpenInput(url="amazon.com"))
+            self.assertEqual(res1.url, "https://www.amazon.com")
+            self.assertEqual(res1.status, "success")
+
+            res2 = tool.execute(WebOpenInput(url="amazon"))
+            self.assertEqual(res2.url, "https://www.amazon.com")
+            self.assertEqual(res2.status, "success")
+
+    def test_app_launch_tool_windows_app(self) -> None:
+        from backend.app.tools.system_tools import AppLaunchTool, AppLaunchInput
+        tool = AppLaunchTool()
+        with unittest.mock.patch("subprocess.Popen") as mock_popen:
+            res = tool.execute(AppLaunchInput(app_name="vlc"))
+            self.assertEqual(res.status, "launched")
+            self.assertIn("vlc", res.message)
+
+    def test_live_search_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import LiveSearchTool, LiveSearchInput
+        tool = LiveSearchTool()
+        with unittest.mock.patch("urllib.request.urlopen") as mock_url:
+            mock_resp = Mock()
+            mock_resp.read.return_value = b"""<rss><channel>
+                <item><title>IND vs NZ 1st ODI Live: India wins by 4 wickets - News</title></item>
+            </channel></rss>"""
+            mock_resp.__enter__ = Mock(return_value=mock_resp)
+            mock_resp.__exit__ = Mock(return_value=None)
+            mock_url.return_value = mock_resp
+
+            res = tool.execute(LiveSearchInput(query="India versus New Zealand"))
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+            self.assertIn("IND vs NZ", res.summary)
+
     def test_all_system_tools_registered(self) -> None:
         from backend.app.tools.system_tools import get_all_system_tools
         tools = get_all_system_tools()
@@ -315,6 +362,7 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertIn("weather.get", names)
         self.assertIn("system.open_app", names)
         self.assertIn("system.datetime", names)
+        self.assertIn("web.search", names)
 
 
 if __name__ == "__main__":
