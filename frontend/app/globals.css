@@ -2176,6 +2176,19 @@ img {
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.45) !important;
 }
 
+.hud-console-trigger.sfx-muted {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+}
+
+.hud-console-trigger.sfx-active {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.4);
+  color: #00f0ff;
+}
+
 .atlas-command-bar {
   display: flex;
   align-items: center;

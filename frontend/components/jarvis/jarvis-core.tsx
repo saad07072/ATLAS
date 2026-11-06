@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
 import { sendChatMessage, type ActionRecord } from "@/services/api";
+import { audioFx } from "@/services/audio-fx";
 
 export type AtlasState = "standby" | "listening" | "processing" | "speaking";
 
@@ -60,6 +61,8 @@ export function AtlasCore(): JSX.Element {
   });
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
+  const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
+  const lastTelemetryTimeRef = useRef<number>(0);
   const [textInput, setTextInput] = useState("");
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -218,12 +221,14 @@ export function AtlasCore(): JSX.Element {
     const handleSpeechComplete = () => {
       if (fallbackTimer) clearTimeout(fallbackTimer);
       setAtlasState("standby");
+      void audioFx.playStandby();
       setTimeout(() => {
         isBusyRef.current = false;
         accumulatedTextRef.current = "";
         setTranscript("");
         if (isActiveRef.current) {
           setAtlasState("listening");
+          void audioFx.playListenStart();
           startRecognitionSafe();
         }
       }, 450);
@@ -290,7 +295,17 @@ export function AtlasCore(): JSX.Element {
     }
   }, [speakAtlas, stopScreenShare]);
 
+  const toggleSfx = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const nextMuted = audioFx.toggleMute();
+    setIsSfxMuted(nextMuted);
+    if (!nextMuted) {
+      void audioFx.playUiTap();
+    }
+  }, []);
+
   const toggleScreenShare = useCallback(() => {
+    void audioFx.playUiTap();
     if (isScreenShared) {
       stopScreenShare();
     } else {
@@ -411,6 +426,11 @@ export function AtlasCore(): JSX.Element {
         if (data.actions && data.actions.length > 0) {
           const act = data.actions[0];
           setLastAction(act);
+          if (act.status === "success") {
+            void audioFx.playSuccess();
+          } else {
+            void audioFx.playAlert();
+          }
           setTimeout(() => {
             setLastAction(null);
           }, 9000);
@@ -433,6 +453,7 @@ export function AtlasCore(): JSX.Element {
           return;
         }
 
+        void audioFx.playAlert();
         const errorReply =
           err instanceof Error
             ? err.message
@@ -505,6 +526,7 @@ export function AtlasCore(): JSX.Element {
         if (!isBusyRef.current && accumulatedTextRef.current.trim()) {
           const textToDispatch = accumulatedTextRef.current.trim();
           accumulatedTextRef.current = "";
+          void audioFx.playCommit();
           setAtlasResponse("Processing request, sir...");
           void sendToAtlas(textToDispatch);
         }
@@ -537,6 +559,7 @@ export function AtlasCore(): JSX.Element {
     try {
       recognition.start();
       setAtlasState("listening");
+      void audioFx.playListenStart();
     } catch {
       // ignore
     }
@@ -549,6 +572,7 @@ export function AtlasCore(): JSX.Element {
     if (isActive) return;
     setIsActive(true);
     isActiveRef.current = true;
+    void audioFx.playBoot();
     await initAudioAnalyser();
     initSpeechRecognition();
 
@@ -637,11 +661,21 @@ export function AtlasCore(): JSX.Element {
           sum += audioDataRef.current[i];
         }
         audioLevel = sum / (binCount * 255);
-        setTelemetry((prev) => ({
-          ...prev,
-          audioLevel: Math.round(audioLevel * 100),
-          frequency: Math.round(300 + audioLevel * 1200),
-        }));
+        const now = performance.now();
+        if (now - lastTelemetryTimeRef.current > 100) {
+          lastTelemetryTimeRef.current = now;
+          const sampleRate = audioContextRef.current?.sampleRate || 44100;
+          const dominantFreq = audioFx.calculateDominantFrequency(
+            analyserRef.current,
+            sampleRate,
+            audioDataRef.current as unknown as Uint8Array,
+          );
+          setTelemetry((prev) => ({
+            ...prev,
+            audioLevel: Math.round(audioLevel * 100),
+            frequency: dominantFreq,
+          }));
+        }
       }
 
       const currentState = atlasStateRef.current;
@@ -937,6 +971,17 @@ export function AtlasCore(): JSX.Element {
         <div className="hud-buttons-row">
           <button
             type="button"
+            className={`hud-console-trigger ${isSfxMuted ? "sfx-muted" : "sfx-active"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSfx(e);
+            }}
+            title={isSfxMuted ? "Unmute procedural sound FX" : "Mute procedural sound FX"}
+          >
+            {isSfxMuted ? "[ 🔇 SFX MUTED ]" : "[ 🔊 SFX ACTIVE ]"}
+          </button>
+          <button
+            type="button"
             className={`hud-console-trigger ${isScreenShared ? "vision-active" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
@@ -951,6 +996,7 @@ export function AtlasCore(): JSX.Element {
             className="hud-console-trigger"
             onClick={(e) => {
               e.stopPropagation();
+              void audioFx.playUiTap();
               setHudConsoleOpen(!hudConsoleOpen);
             }}
             title="Toggle System Management Console"
