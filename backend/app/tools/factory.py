@@ -28,9 +28,28 @@ def create_tool_execution_service(tools: list[Tool]) -> ToolExecutionService:
     )
 
 
-def create_default_tool_execution_service() -> ToolExecutionService:
+def create_default_tool_execution_service(user_id: str | None = None) -> ToolExecutionService:
     from backend.app.tools.demo import EchoTool
     from backend.app.tools.system_tools import get_all_system_tools
 
-    all_tools = [EchoTool(), *get_all_system_tools()]
+    all_tools: list[Tool] = [EchoTool(), *get_all_system_tools()]
+
+    if user_id:
+        try:
+            from backend.app.integrations.google.runtime import get_google_api_client
+            from backend.app.integrations.google.tools import create_google_tools
+            google_client = get_google_api_client(user_id)
+            g_tools = [t for t in create_google_tools(google_client) if t.name != "system.echo"]
+            all_tools.extend(g_tools)
+        except Exception:
+            pass
+
+        try:
+            from backend.app.integrations.github.runtime import get_github_api_client
+            from backend.app.integrations.github.tools import create_all_github_tools
+            github_client = get_github_api_client()
+            all_tools.extend(create_all_github_tools(github_client))
+        except Exception:
+            pass
+
     return create_tool_execution_service(all_tools)

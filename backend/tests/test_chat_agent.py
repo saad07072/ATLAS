@@ -344,5 +344,120 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].status, "success")
 
 
+    def test_calendar_list_events_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"calendar.list_events": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="calendar.list_events",
+            success=True,
+            output={
+                "events": [
+                    {"summary": "Sprint Retro", "start": {"dateTime": "2026-11-08T15:00:00Z"}}
+                ]
+            },
+            metadata=ToolExecutionMetadata(duration_ms=10.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="what meetings do I have scheduled?"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Sprint Retro", response.message)
+        self.assertEqual(response.actions[0].tool, "calendar.list_events")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_calendar_unconnected_guides_user(self) -> None:
+        tool_executor = Mock()
+        tool_executor.registry._tools = {}
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="check my calendar"))
+        self.assertEqual(response.intent, "conversation")
+        self.assertIn("Google Workspace is not currently connected", response.message)
+        self.assertEqual(response.actions[0].tool, "calendar.list_events")
+        self.assertEqual(response.actions[0].status, "requested")
+
+    def test_gmail_search_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"gmail.search": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="gmail.search",
+            success=True,
+            output={
+                "messages": [
+                    {"from": "lead@company.com", "subject": "Project ATLAS Release"}
+                ]
+            },
+            metadata=ToolExecutionMetadata(duration_ms=15.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="check my emails for ATLAS"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Project ATLAS Release", response.message)
+        self.assertEqual(response.actions[0].tool, "gmail.search")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_github_list_repositories_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"github.list_repositories": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="github.list_repositories",
+            success=True,
+            output={
+                "repositories": [
+                    {"full_name": "saad07072/ATLAS", "private": False}
+                ]
+            },
+            metadata=ToolExecutionMetadata(duration_ms=20.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="list my github repos"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("saad07072/ATLAS", response.message)
+        self.assertEqual(response.actions[0].tool, "github.list_repositories")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_file_read_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.file_read": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.file_read",
+            success=True,
+            output={"content": "sample configuration data"},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="read file config.json"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("sample configuration data", response.message)
+        self.assertEqual(response.actions[0].tool, "system.file_read")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_cognitive_real_time_search_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"web.search": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="web.search",
+            success=True,
+            output={
+                "status": "success",
+                "summary": "Quantum supremacy demonstrated by new Google chip",
+                "headlines": ["Google announces new quantum benchmark"]
+            },
+            metadata=ToolExecutionMetadata(duration_ms=18.0),
+        )
+        self.provider.generate.return_value = Mock(
+            content="Google has announced breakthrough quantum benchmarks, sir."
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="What is the latest news about quantum computing?"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("quantum", response.message.lower())
+        self.assertEqual(response.actions[0].tool, "web.search")
+        self.assertEqual(response.actions[0].status, "success")
+
+
 if __name__ == "__main__":
     unittest.main()

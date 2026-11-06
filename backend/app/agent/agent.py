@@ -15,10 +15,14 @@ from backend.app.tools.models import ToolExecutionRequest, ToolResult
 
 MAX_RESPONSE_CHARACTERS = 8000
 CAPABILITIES_RESPONSE = (
-    "I can answer questions, search the live web and sports feeds for real-time scores, "
-    "inspect and analyze your active screen through multimodal vision, "
+    "I am ATLAS, your autonomous task and life assistant system. "
+    "I can answer questions and possess direct execution capabilities across your PC, web, and cloud services: "
+    "I can search the live web and sports feeds for real-time scores and news, "
+    "inspect and analyze your active screen through multimodal neural vision, "
     "open and close any website or browser tab, launch any desktop application on your Windows PC, "
-    "check live weather, execute shell commands, and control system tasks with verified proof. "
+    "manage your Google Calendar events and find free slots, search and draft Gmail messages, "
+    "inspect GitHub repositories, issues, PRs, and workflow runs, "
+    "check live global weather, read and write files, and execute safe shell commands with verified proof. "
     "I cannot perform actions that are unconfirmed destructive operations or physical purchases without authorization."
 )
 CLARIFICATION_RESPONSE = "Could you clarify what you would like me to help with?"
@@ -108,6 +112,40 @@ class ChatAgent:
         self.tool_executor = tool_executor
         self.memory_service = memory_service
 
+    def ensure_user_tools(self, user_id: str | None) -> None:
+        if not user_id or not self.tool_executor:
+            return
+        from backend.app.security.models import PermissionId, RiskLevel
+        from backend.app.security.policy import PermissionRule
+        permission_by_string = {p.value: p for p in PermissionId}
+        user_tools = []
+        try:
+            from backend.app.integrations.google.runtime import get_google_api_client
+            from backend.app.integrations.google.tools import create_google_tools
+            g_tools = [t for t in create_google_tools(get_google_api_client(user_id)) if t.name != "system.echo"]
+            user_tools.extend(g_tools)
+        except Exception:
+            pass
+
+        try:
+            from backend.app.integrations.github.runtime import get_github_api_client
+            from backend.app.integrations.github.tools import create_all_github_tools
+            user_tools.extend(create_all_github_tools(get_github_api_client()))
+        except Exception:
+            pass
+
+        for t in user_tools:
+            if t.name not in self.tool_executor.registry._tools:
+                self.tool_executor.registry.register(t)
+                perm = permission_by_string.get(t.permission_id)
+                if perm:
+                    self.tool_executor.permission_boundary.policy._rules[(t.name, perm)] = PermissionRule(
+                        allowed=True,
+                        risk_level=RiskLevel(t.risk_level),
+                        permission_required=t.permission_required,
+                    )
+
+
     def execute_tool_request(self, request: ToolExecutionRequest) -> ToolResult:
         if self.tool_executor is None:
             raise ChatAgentError("Tool execution is not configured.")
@@ -132,9 +170,16 @@ class ChatAgent:
                 requires_clarification=True,
             )
 
-        action_response = self._try_execute_action(request.message, request.image_data)
+        if memory_user_id:
+            self.ensure_user_tools(memory_user_id)
+
+        action_response = self._try_execute_action(request.message, request.image_data, memory_user_id)
         if action_response is not None:
             return action_response
+
+        cognitive_response = self._try_cognitive_tool_execution(request, memory_user_id)
+        if cognitive_response is not None:
+            return cognitive_response
 
         memory_context = self._retrieve_memory(request, memory_user_id)
         provider_request = LLMRequest(
@@ -240,7 +285,7 @@ class ChatAgent:
             return content.replace(self.secret, "[redacted]")
         return content
 
-    def _try_execute_action(self, message: str, image_data: str | None = None) -> ChatResponse | None:
+    def _try_execute_action(self, message: str, image_data: str | None = None, user_id: str | None = None) -> ChatResponse | None:
 
         clean_lower = message.lower().strip("?.! ")
 
@@ -555,4 +600,368 @@ class ChatAgent:
                 ],
             )
 
+        # 8a. File System Read
+        read_file_match = re.search(
+            r"\b(?:read|view|inspect|show|display|cat)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:file\s+)?([a-zA-Z]:\\[^\s]+|\.?/[^\s]+|[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+)\b",
+            clean_lower,
+        )
+        if read_file_match:
+            filepath = read_file_match.group(1).strip()
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.file_read", arguments={"path": filepath}))
+            if result.success and isinstance(result.output, dict):
+                content = result.output.get("content", "")
+                summary = content[:500] + ("..." if len(content) > 500 else "")
+                return ChatResponse(
+                    intent="task_request",
+                    message=f"I have inspected '{filepath}' for you, sir:\n```\n{summary}\n```",
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="system.file_read",
+                            target=filepath,
+                            status="success",
+                            message=f"Read {len(content)} characters from {filepath}",
+                            verified=True,
+                        )
+                    ],
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"I was unable to read file '{filepath}', sir: {result.error or 'File not accessible'}",
+                actions=[
+                    ActionExecutionRecord(
+                        tool="system.file_read",
+                        target=filepath,
+                        status="failed",
+                        message=f"Failed to read {filepath}",
+                        verified=False,
+                    )
+                ],
+            )
+
+        # 8b. File System Write
+        write_file_match = re.search(
+            r"\b(?:write|save|append)\s+(?:to\s+)?file\s+([a-zA-Z]:\\[^\s]+|\.?/[^\s]+|[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+)(?::|\s+with\s+(?:content|text)\s+)(.+)$",
+            message,
+            re.IGNORECASE,
+        )
+        if write_file_match:
+            filepath = write_file_match.group(1).strip()
+            content_to_write = write_file_match.group(2).strip().strip("'\"")
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.file_write", arguments={"path": filepath, "content": content_to_write}))
+            if result.success:
+                return ChatResponse(
+                    intent="task_request",
+                    message=f"I have successfully written the contents to '{filepath}', sir.",
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="system.file_write",
+                            target=filepath,
+                            status="success",
+                            message=f"Wrote to {filepath}",
+                            verified=True,
+                        )
+                    ],
+                )
+
+        # 9a. Google Calendar List Events
+        cal_match = re.search(
+            r"\b(?:what\s+meetings?|meetings?\s+(?:do\s+i\s+have|are\s+scheduled|today|tomorrow)|(?:my\s+)?(?:calendar|schedule|agenda)|do\s+i\s+have\s+(?:any\s+)?(?:meetings?|calls?|events?)|upcoming\s+(?:meetings?|events?)|check\s+(?:my\s+)?(?:calendar|schedule))\b",
+            clean_lower,
+        )
+        if cal_match:
+            if "calendar.list_events" not in self.tool_executor.registry._tools:
+                return ChatResponse(
+                    intent="conversation",
+                    message=(
+                        "Your Google Workspace is not currently connected, sir. "
+                        "You can connect your Google Calendar and Gmail in the System Console under Connected Services."
+                    ),
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="calendar.list_events",
+                            target="primary",
+                            status="requested",
+                            message="Google integration required - please connect in System Console",
+                            verified=False,
+                        )
+                    ],
+                )
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            end = now + (timedelta(days=1) if "today" in clean_lower else timedelta(days=7))
+            result = self.execute_tool_request(ToolExecutionRequest(
+                name="calendar.list_events",
+                arguments={"calendar_id": "primary", "time_min": now.isoformat(), "time_max": end.isoformat(), "max_results": 20}
+            ))
+            if result.success and isinstance(result.output, dict):
+                events = result.output.get("events", [])
+                if events:
+                    event_lines = [f"• {e.get('summary', 'Untitled')} ({e.get('start', {}).get('dateTime', 'All Day')})" for e in events[:5]]
+                    msg = f"You have {len(events)} scheduled event(s), sir:\n" + "\n".join(event_lines)
+                else:
+                    msg = "Your calendar appears completely clear for this period, sir. No scheduled meetings found."
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="calendar.list_events",
+                            target="primary",
+                            status="success",
+                            message=f"Retrieved {len(events)} calendar events",
+                            verified=True,
+                        )
+                    ],
+                )
+            return ChatResponse(
+                intent="conversation",
+                message="Your Google Workspace is not currently connected, sir. You can connect your Google Calendar and Gmail in the System Console under Connected Services.",
+                actions=[
+                    ActionExecutionRecord(
+                        tool="calendar.list_events",
+                        target="primary",
+                        status="requested",
+                        message="Google integration required - please connect in System Console",
+                        verified=False,
+                    )
+                ],
+            )
+
+        # 9b. Calendar Free Slots
+        free_slots_match = re.search(
+            r"\b(?:free\s+slots?|free\s+time|available\s+slots?|find\s+free\s+time|when\s+am\s+i\s+free)\b",
+            clean_lower,
+        )
+        if free_slots_match:
+            if "calendar.find_free_slots" not in self.tool_executor.registry._tools:
+                return ChatResponse(
+                    intent="conversation",
+                    message="Your Google Workspace is not currently connected, sir. Please connect Google Calendar in the System Console.",
+                    actions=[ActionExecutionRecord(tool="calendar.find_free_slots", target="primary", status="requested", message="Google connection required", verified=False)],
+                )
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            end = now + timedelta(days=2)
+            result = self.execute_tool_request(ToolExecutionRequest(
+                name="calendar.find_free_slots",
+                arguments={"calendar_id": "primary", "time_min": now.isoformat(), "time_max": end.isoformat(), "duration_minutes": 30}
+            ))
+            if result.success and isinstance(result.output, dict):
+                slots = result.output.get("free_slots", [])
+                if slots:
+                    slot_lines = [f"• {s.get('start')} to {s.get('end')}" for s in slots[:5]]
+                    msg = f"I have discovered {len(slots)} available window(s) for you, sir:\n" + "\n".join(slot_lines)
+                else:
+                    msg = "No open 30-minute free slots detected within the next 48 hours, sir."
+                return ChatResponse(intent="task_request", message=msg, actions=[ActionExecutionRecord(tool="calendar.find_free_slots", target="primary", status="success", message=f"Found {len(slots)} free slots", verified=True)])
+
+        # 10. Gmail Search & Read
+        gmail_match = re.search(
+            r"\b(?:check\s+(?:my\s+)?(?:emails?|inbox|mail|messages?)|search\s+(?:my\s+)?(?:emails?|inbox)\s*(?:for\s+)?(.*)|unread\s+(?:emails?|messages?)|any\s+(?:new\s+)?(?:emails?|messages?))\b",
+            clean_lower,
+        )
+        if gmail_match:
+            if "gmail.search" not in self.tool_executor.registry._tools:
+                return ChatResponse(
+                    intent="conversation",
+                    message="Your Google Workspace is not currently connected, sir. You can connect Gmail in the System Console under Connected Services.",
+                    actions=[ActionExecutionRecord(tool="gmail.search", target="inbox", status="requested", message="Google integration required", verified=False)],
+                )
+            query = "is:unread"
+            if gmail_match.group(1) and gmail_match.group(1).strip():
+                query = gmail_match.group(1).strip()
+            result = self.execute_tool_request(ToolExecutionRequest(name="gmail.search", arguments={"query": query, "max_results": 10}))
+            if result.success and isinstance(result.output, dict):
+                messages = result.output.get("messages", [])
+                if messages:
+                    msg_lines = [f"• From: {m.get('from', 'Unknown')} | Subject: {m.get('subject', 'No Subject')}" for m in messages[:5]]
+                    msg = f"I have queried your inbox, sir. Found {len(messages)} matching email(s):\n" + "\n".join(msg_lines)
+                else:
+                    msg = f"I have checked your inbox, sir. No messages found matching '{query}'."
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="gmail.search", target=query, status="success", message=f"Found {len(messages)} messages", verified=True)],
+                )
+            return ChatResponse(
+                intent="conversation",
+                message="Your Google Workspace is not currently connected, sir. You can connect your Gmail in the System Console under Connected Services.",
+                actions=[ActionExecutionRecord(tool="gmail.search", target="inbox", status="requested", message="Google integration required", verified=False)],
+            )
+
+        # 11a. GitHub List Repositories
+        gh_repos_match = re.search(
+            r"\b(?:list|show|get)\s+(?:my\s+)?(?:github\s+)?repos(?:itories)?\b",
+            clean_lower,
+        )
+        if gh_repos_match:
+            if "github.list_repositories" not in self.tool_executor.registry._tools:
+                return ChatResponse(
+                    intent="conversation",
+                    message="GitHub App integration is not currently configured for your account, sir. You can configure GitHub authentication in the System Console.",
+                    actions=[ActionExecutionRecord(tool="github.list_repositories", target="github", status="requested", message="GitHub credentials required", verified=False)],
+                )
+            result = self.execute_tool_request(ToolExecutionRequest(name="github.list_repositories", arguments={"page": 1, "per_page": 20}))
+            if result.success and isinstance(result.output, dict):
+                repos = result.output.get("repositories", [])
+                if repos:
+                    repo_lines = [f"• {r.get('full_name')} ({'Private' if r.get('private') else 'Public'})" for r in repos[:8]]
+                    msg = f"I have retrieved your GitHub repositories, sir:\n" + "\n".join(repo_lines)
+                else:
+                    msg = "No accessible GitHub repositories found under your authenticated account, sir."
+                return ChatResponse(intent="task_request", message=msg, actions=[ActionExecutionRecord(tool="github.list_repositories", target="user", status="success", message=f"Retrieved {len(repos)} repositories", verified=True)])
+            return ChatResponse(
+                intent="conversation",
+                message="GitHub App integration is not currently configured for your account, sir. You can configure GitHub authentication in the System Console.",
+                actions=[ActionExecutionRecord(tool="github.list_repositories", target="github", status="requested", message="GitHub credentials required", verified=False)],
+            )
+
+        # 11b. GitHub List Issues
+        gh_issues_match = re.search(
+            r"\b(?:list|show|check|get)\s+(?:open\s+)?issues\s+(?:on|in|for)\s+([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)\b",
+            clean_lower,
+        )
+        if gh_issues_match:
+            full_repo = gh_issues_match.group(1).strip()
+            owner, repo = full_repo.split("/", 1)
+            if "github.list_issues" not in self.tool_executor.registry._tools:
+                return ChatResponse(intent="conversation", message="GitHub App integration is not currently configured, sir.", actions=[ActionExecutionRecord(tool="github.list_issues", target=full_repo, status="requested", message="GitHub credentials required", verified=False)])
+            result = self.execute_tool_request(ToolExecutionRequest(name="github.list_issues", arguments={"owner": owner, "repo": repo, "page": 1, "per_page": 10}))
+            if result.success and isinstance(result.output, dict):
+                issues = result.output.get("issues", [])
+                if issues:
+                    issue_lines = [f"• #{i.get('number')} {i.get('title')} ({i.get('state')})" for i in issues[:5]]
+                    msg = f"Open issues for '{full_repo}', sir:\n" + "\n".join(issue_lines)
+                else:
+                    msg = f"No open issues found on repository '{full_repo}', sir."
+                return ChatResponse(intent="task_request", message=msg, actions=[ActionExecutionRecord(tool="github.list_issues", target=full_repo, status="success", message=f"Retrieved {len(issues)} issues", verified=True)])
+            return ChatResponse(intent="task_request", message=f"Could not retrieve issues for '{full_repo}', sir: {result.error}", actions=[ActionExecutionRecord(tool="github.list_issues", target=full_repo, status="failed", message=f"Failed: {result.error}", verified=False)])
+
+        # 11c. GitHub Create Issue
+        gh_create_issue_match = re.search(
+            r"\b(?:create|open)\s+(?:an?\s+)?issue\s+(?:on|in|for)\s+([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)\s+(?:titled|with title)\s+([a-zA-Z0-9_\s.-]+)\b",
+            message,
+            re.IGNORECASE,
+        )
+        if gh_create_issue_match:
+            full_repo = gh_create_issue_match.group(1).strip()
+            title = gh_create_issue_match.group(2).strip()
+            owner, repo = full_repo.split("/", 1)
+            if "github.create_issue" not in self.tool_executor.registry._tools:
+                return ChatResponse(intent="conversation", message="GitHub App integration is not currently configured, sir.", actions=[ActionExecutionRecord(tool="github.create_issue", target=full_repo, status="requested", message="GitHub credentials required", verified=False)])
+            result = self.execute_tool_request(ToolExecutionRequest(name="github.create_issue", arguments={"owner": owner, "repo": repo, "title": title}))
+            if result.success and isinstance(result.output, dict):
+                issue_num = result.output.get("number")
+                url = result.output.get("html_url", "")
+                msg = f"I have successfully created issue #{issue_num} on '{full_repo}' titled '{title}', sir.\n{url}"
+                return ChatResponse(intent="task_request", message=msg, actions=[ActionExecutionRecord(tool="github.create_issue", target=f"{full_repo}#{issue_num}", status="success", message=f"Created issue #{issue_num}", verified=True)])
+            return ChatResponse(intent="task_request", message=f"Failed to create issue on '{full_repo}', sir: {result.error}", actions=[ActionExecutionRecord(tool="github.create_issue", target=full_repo, status="failed", message=f"Failed: {result.error}", verified=False)])
+
+        # 11d. GitHub Workflow Runs
+        gh_workflow_match = re.search(
+            r"\b(?:workflow\s+runs?|github\s+actions?|ci\s+runs?|build\s+status)\s+(?:on|for|in)\s+([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)\b",
+            clean_lower,
+        )
+        if gh_workflow_match:
+            full_repo = gh_workflow_match.group(1).strip()
+            owner, repo = full_repo.split("/", 1)
+            if "github.list_workflow_runs" not in self.tool_executor.registry._tools:
+                return ChatResponse(intent="conversation", message="GitHub App integration is not configured, sir.", actions=[ActionExecutionRecord(tool="github.list_workflow_runs", target=full_repo, status="requested", message="GitHub credentials required", verified=False)])
+            result = self.execute_tool_request(ToolExecutionRequest(name="github.list_workflow_runs", arguments={"owner": owner, "repo": repo, "page": 1, "per_page": 5}))
+            if result.success and isinstance(result.output, dict):
+                runs = result.output.get("workflow_runs", [])
+                if runs:
+                    run_lines = [f"• {r.get('name')} (#{r.get('run_number')}): {r.get('conclusion') or r.get('status')}" for r in runs[:5]]
+                    msg = f"Recent workflow runs on '{full_repo}', sir:\n" + "\n".join(run_lines)
+                else:
+                    msg = f"No workflow runs found on '{full_repo}', sir."
+                return ChatResponse(intent="task_request", message=msg, actions=[ActionExecutionRecord(tool="github.list_workflow_runs", target=full_repo, status="success", message=f"Retrieved {len(runs)} workflow runs", verified=True)])
+            return ChatResponse(intent="task_request", message=f"Could not retrieve workflow runs for '{full_repo}', sir: {result.error}", actions=[ActionExecutionRecord(tool="github.list_workflow_runs", target=full_repo, status="failed", message=f"Failed: {result.error}", verified=False)])
+
         return None
+
+
+    def _try_cognitive_tool_execution(
+        self,
+        request: ChatRequest,
+        memory_user_id: str | None = None,
+    ) -> ChatResponse | None:
+        if not self.tool_executor:
+            return None
+
+        clean_lower = request.message.lower().strip("?.! ")
+
+        # Check if user is asking for real-time information, research, scores, or facts
+        research_indicators = re.search(
+            r"\b(?:who\s+is\s+the\s+current|what\s+is\s+the\s+latest|who\s+won|score\s+of|news\s+about|"
+            r"look\s+up|search\s+for|search\s+the\s+web|find\s+information\s+on|documentation\s+for|"
+            r"release\s+date\s+of|what\s+happened\s+to|stock\s+price\s+of|current\s+price\s+of|"
+            r"who\s+is\s+winning|what\s+are\s+the\s+latest\s+features\s+of)\b",
+            clean_lower,
+        )
+        if not research_indicators:
+            return None
+
+        # Execute web.search to retrieve verified real-time facts
+        target_query = request.message.strip()
+        search_res = self.execute_tool_request(
+            ToolExecutionRequest(name="web.search", arguments={"query": target_query})
+        )
+        if not search_res.success or not isinstance(search_res.output, dict):
+            return None
+
+        summary = search_res.output.get("summary", "")
+        headlines = search_res.output.get("headlines", [])
+        evidence_text = "\n".join(f"- {h}" for h in headlines) if headlines else summary
+
+        # Feed the verified real-time evidence to Gemini to synthesize a polished answer
+        memory_context = self._retrieve_memory(request, memory_user_id)
+        evidence_prompt = (
+            f"Verified Real-Time Web Evidence (100% current ground truth for query '{target_query}'):\n"
+            f"{evidence_text}\n\n"
+            f"{self._build_prompt(request, memory_context)}\n\n"
+            f"Synthesize an accurate, polished, and truthful British assistant briefing for the user based strictly on the verified live evidence above."
+        )
+        provider_request = LLMRequest(
+            messages=[
+                LLMMessage(
+                    role="user",
+                    content=evidence_prompt,
+                    image_data=request.image_data,
+                )
+            ],
+            system_instruction=SYSTEM_INSTRUCTION,
+            image_data=request.image_data,
+        )
+        try:
+            llm_resp = self.provider.generate(provider_request)
+            answer = llm_resp.content.strip()
+            if self.secret:
+                answer = answer.replace(self.secret, "[redacted]")
+            return ChatResponse(
+                intent="task_request",
+                message=answer,
+                actions=[
+                    ActionExecutionRecord(
+                        tool="web.search",
+                        target=target_query,
+                        status="success",
+                        message=summary,
+                        verified=True,
+                    )
+                ],
+            )
+        except Exception:
+            return ChatResponse(
+                intent="task_request",
+                message=summary,
+                actions=[
+                    ActionExecutionRecord(
+                        tool="web.search",
+                        target=target_query,
+                        status="success",
+                        message=summary,
+                        verified=True,
+                    )
+                ],
+            )
