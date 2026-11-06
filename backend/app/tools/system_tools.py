@@ -317,8 +317,11 @@ class AppLaunchTool(Tool):
 
         try:
             if cmd is not None:
-                if hasattr(os, "startfile") and name_clean in {"calc", "calculator", "notepad", "mspaint"}:
-                    os.startfile(f"{name_clean}.exe" if not name_clean.endswith(".exe") else name_clean)
+                if hasattr(os, "startfile") and len(cmd) == 1 and cmd[0].endswith(".exe"):
+                    try:
+                        os.startfile(cmd[0])
+                    except Exception:
+                        subprocess.Popen(cmd, shell=True)
                 else:
                     subprocess.Popen(cmd, shell=True)
             else:

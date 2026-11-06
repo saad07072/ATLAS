@@ -439,7 +439,7 @@ class ChatAgent:
 
         # 3. Website Open Execution
         open_web_match = re.search(
-            r"\b(?:open|launch|go to|browse to|visit)\s+(?:the\s+)?(?:website\s+)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|youtube|google|github|reddit|twitter|x|spotify|netflix|wikipedia|chatgpt|gemini|linkedin|amazon|facebook|instagram|twitch|gmail|maps|drive|outlook|yahoo|ebay|walmart)\b",
+            r"\b(?:open|launch|go to|browse to|visit)\s+(?:the\s+)?(?:website\s+)?((?:https?://)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|https?://[^\s]+|youtube|google|github|reddit|twitter|x|spotify|netflix|wikipedia|chatgpt|gemini|linkedin|amazon|facebook|instagram|twitch|gmail|maps|drive|outlook|yahoo|ebay|walmart)\b",
             clean_lower,
         )
         if open_web_match:
@@ -525,42 +525,45 @@ class ChatAgent:
             )
 
         # 5. Desktop Application Launch (Supports any application on Windows)
-        app_match = re.search(
-            r"\b(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+|application\s+|program\s+)?([a-zA-Z0-9_.-]+(?:\s+[a-zA-Z0-9_.-]+)?)\b",
-            clean_lower,
-        )
+        app_match = None
+        if not clean_lower.startswith(("list", "show", "what", "which", "find", "search", "switch", "focus", "close", "minimize", "maximize")):
+            app_match = re.search(
+                r"\b(?:open|launch|start|run)\s+(?:the\s+)?(?:app\s+|application\s+|program\s+)?([a-zA-Z0-9_.-]+(?:\s+[a-zA-Z0-9_.-]+)?)\b",
+                clean_lower,
+            )
         if app_match:
-            app = app_match.group(1)
-            result = self.execute_tool_request(ToolExecutionRequest(name="system.open_app", arguments={"app_name": app}))
-            app_disp = app.capitalize()
-            if result.success:
+            app = app_match.group(1).strip()
+            if app not in {"app", "application", "program", "window", "windows", "tab", "tabs", "file", "files"}:
+                result = self.execute_tool_request(ToolExecutionRequest(name="system.open_app", arguments={"app_name": app}))
+                app_disp = app.capitalize()
+                if result.success:
+                    return ChatResponse(
+                        intent="task_request",
+                        message=f"I have launched {app_disp} on your desktop, sir.",
+                        actions=[
+                            ActionExecutionRecord(
+                                tool="system.open_app",
+                                target=app,
+                                status="success",
+                                message=f"Launched {app_disp}",
+                                verified=True,
+                            )
+                        ],
+                    )
                 return ChatResponse(
                     intent="task_request",
-                    message=f"I have launched {app_disp} on your desktop, sir.",
+                    message=f"I was unable to launch {app_disp}, sir: {result.error or 'Failed'}",
                     actions=[
                         ActionExecutionRecord(
                             tool="system.open_app",
                             target=app,
-                            status="success",
-                            message=f"Launched {app_disp}",
-                            verified=True,
+                            status="failed",
+                            message=f"Failed to launch {app_disp}",
+                            verified=False,
                         )
                     ],
                 )
-            return ChatResponse(
-                intent="task_request",
-                message=f"I was unable to launch {app_disp}, sir: {result.error or 'Failed'}",
-                actions=[
-                    ActionExecutionRecord(
-                        tool="system.open_app",
-                        target=app,
-                        status="failed",
-                        message=f"Failed to launch {app_disp}",
-                        verified=False,
-                    )
-                ],
-            )
-
+    
         # 6. System Date & Time
         if re.search(r"\b(?:what time is it|what is the time|current time|what is today's date|today's date|what day is it)\b", clean_lower):
             result = self.execute_tool_request(ToolExecutionRequest(name="system.datetime", arguments={}))
@@ -881,7 +884,7 @@ class ChatAgent:
 
         # 12. List Active Windows / Running Applications
         list_windows_match = re.search(
-            r"\b(?:what\s+windows|what\s+apps|which\s+apps|list\s+windows|list\s+apps|show\s+open\s+windows|show\s+active\s+apps|running\s+applications|what\s+is\s+running)\b",
+            r"\b(?:what\s+windows|what\s+apps|which\s+apps|list\s+(?:open\s+)?(?:windows|apps|applications)|show\s+open\s+windows|show\s+active\s+apps|running\s+applications|what\s+is\s+running)\b",
             clean_lower,
         )
         if list_windows_match:
@@ -915,6 +918,11 @@ class ChatAgent:
                         message=msg,
                         actions=[ActionExecutionRecord(tool="system.focus_window", target=target_win, status="success", message=msg, verified=True)]
                     )
+                return ChatResponse(
+                    intent="task_request",
+                    message=f"Could not focus {target_win}, sir: {result.error}",
+                    actions=[ActionExecutionRecord(tool="system.focus_window", target=target_win, status="failed", message=f"Failed: {result.error}", verified=False)]
+                )
 
         # 14. Send Keystrokes & Type Text
         type_text_match = re.search(
@@ -942,6 +950,11 @@ class ChatAgent:
                         message=msg,
                         actions=[ActionExecutionRecord(tool="system.send_keys", target=target_app or "active_window", status="success", message=msg, verified=True)]
                     )
+                return ChatResponse(
+                    intent="task_request",
+                    message=f"Could not send keystrokes, sir: {result.error}",
+                    actions=[ActionExecutionRecord(tool="system.send_keys", target=target_app or "active_window", status="failed", message=f"Failed: {result.error}", verified=False)]
+                )
 
         # 15. Window State (Minimize All / Show Desktop / Maximize)
         min_all_match = re.search(
@@ -957,6 +970,11 @@ class ChatAgent:
                     message=msg,
                     actions=[ActionExecutionRecord(tool="system.window_state", target="all_windows", status="success", message=msg, verified=True)]
                 )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not minimize windows, sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.window_state", target="all_windows", status="failed", message=f"Failed: {result.error}", verified=False)]
+            )
 
         maximize_match = re.search(
             r"\b(?:maximize|restore)\s+(?:the\s+)?([a-zA-Z0-9_\s.-]+?)(?:\s+window|\s+app)?$",
