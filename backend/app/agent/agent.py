@@ -19,7 +19,8 @@ CAPABILITIES_RESPONSE = (
     "I can answer questions and possess direct execution capabilities across your PC, web, and cloud services: "
     "I can search the live web and sports feeds for real-time scores and news, "
     "inspect and analyze your active screen through multimodal neural vision, "
-    "open and close any website or browser tab, launch any desktop application on your Windows PC, "
+    "open and close any website or browser tab, launch, focus, and close any desktop application on your Windows PC, "
+    "enumerate open windows, simulate keyboard typing and hotkeys, control window states (maximize, minimize, show desktop), "
     "manage your Google Calendar events and find free slots, search and draft Gmail messages, "
     "inspect GitHub repositories, issues, PRs, and workflow runs, "
     "check live global weather, read and write files, and execute safe shell commands with verified proof. "
@@ -877,6 +878,101 @@ class ChatAgent:
                     msg = f"No workflow runs found on '{full_repo}', sir."
                 return ChatResponse(intent="task_request", message=msg, actions=[ActionExecutionRecord(tool="github.list_workflow_runs", target=full_repo, status="success", message=f"Retrieved {len(runs)} workflow runs", verified=True)])
             return ChatResponse(intent="task_request", message=f"Could not retrieve workflow runs for '{full_repo}', sir: {result.error}", actions=[ActionExecutionRecord(tool="github.list_workflow_runs", target=full_repo, status="failed", message=f"Failed: {result.error}", verified=False)])
+
+        # 12. List Active Windows / Running Applications
+        list_windows_match = re.search(
+            r"\b(?:what\s+windows|what\s+apps|which\s+apps|list\s+windows|list\s+apps|show\s+open\s+windows|show\s+active\s+apps|running\s+applications|what\s+is\s+running)\b",
+            clean_lower,
+        )
+        if list_windows_match:
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.list_windows", arguments={}))
+            if result.success and isinstance(result.output, dict):
+                summary = result.output.get("summary", "No active windows found.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=summary,
+                    actions=[ActionExecutionRecord(tool="system.list_windows", target="desktop", status="success", message=summary, verified=True)]
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not enumerate open windows, sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.list_windows", target="desktop", status="failed", message=f"Failed: {result.error}", verified=False)]
+            )
+
+        # 13. Focus / Switch Application Window
+        focus_window_match = re.search(
+            r"\b(?:focus|switch\s+to|bring\s+to\s+front|activate)\s+(?:the\s+)?([a-zA-Z0-9_\s.-]+?)(?:\s+window|\s+app)?$",
+            clean_lower,
+        )
+        if focus_window_match:
+            target_win = focus_window_match.group(1).strip()
+            if target_win not in {"on", "it", "my", "this", "that", "me"}:
+                result = self.execute_tool_request(ToolExecutionRequest(name="system.focus_window", arguments={"target": target_win}))
+                if result.success and isinstance(result.output, dict):
+                    msg = result.output.get("message", f"Brought {target_win} to the foreground, sir.")
+                    return ChatResponse(
+                        intent="task_request",
+                        message=msg,
+                        actions=[ActionExecutionRecord(tool="system.focus_window", target=target_win, status="success", message=msg, verified=True)]
+                    )
+
+        # 14. Send Keystrokes & Type Text
+        type_text_match = re.search(
+            r'\b(?:type|write|input|send\s+keys?)\s+(.+?)(?:\s+(?:in|into|on)\s+([a-zA-Z0-9_\s.-]+))?$',
+            message,
+            re.IGNORECASE,
+        )
+        if type_text_match:
+            raw_text = type_text_match.group(1).strip().strip('"\' ')
+            target_app = type_text_match.group(2).strip() if type_text_match.group(2) else None
+            # Do not intercept file write or shell run
+            if not re.search(r"\b(?:to\s+file|into\s+file|\bfile\b|\.txt|\.py|\.json)\b", clean_lower):
+                has_enter = bool(re.search(r"\b(?:and\s+press\s+enter|and\s+hit\s+enter)\b", clean_lower))
+                clean_keys = re.sub(r"\s+(?:and\s+press\s+enter|and\s+hit\s+enter)\b", "", raw_text, flags=re.IGNORECASE).strip()
+                result = self.execute_tool_request(
+                    ToolExecutionRequest(
+                        name="system.send_keys",
+                        arguments={"text": clean_keys, "target_window": target_app, "press_enter": has_enter}
+                    )
+                )
+                if result.success and isinstance(result.output, dict):
+                    msg = result.output.get("message", f"Typed \"{clean_keys}\", sir.")
+                    return ChatResponse(
+                        intent="task_request",
+                        message=msg,
+                        actions=[ActionExecutionRecord(tool="system.send_keys", target=target_app or "active_window", status="success", message=msg, verified=True)]
+                    )
+
+        # 15. Window State (Minimize All / Show Desktop / Maximize)
+        min_all_match = re.search(
+            r"\b(?:minimize\s+all(?:\s+windows)?|show\s+desktop|hide\s+all\s+windows)\b",
+            clean_lower,
+        )
+        if min_all_match:
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.window_state", arguments={"action": "minimize_all"}))
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", "All desktop windows minimized to reveal your desktop, sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.window_state", target="all_windows", status="success", message=msg, verified=True)]
+                )
+
+        maximize_match = re.search(
+            r"\b(?:maximize|restore)\s+(?:the\s+)?([a-zA-Z0-9_\s.-]+?)(?:\s+window|\s+app)?$",
+            clean_lower,
+        )
+        if maximize_match:
+            act = "maximize" if "maximize" in clean_lower else "restore"
+            target_win = maximize_match.group(1).strip()
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.window_state", arguments={"action": act, "target": target_win}))
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", f"Executed {act} on {target_win}, sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.window_state", target=target_win, status="success", message=msg, verified=True)]
+                )
 
         return None
 

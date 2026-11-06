@@ -458,6 +458,79 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].tool, "web.search")
         self.assertEqual(response.actions[0].status, "success")
 
+    def test_system_list_windows_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.list_windows": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.list_windows",
+            success=True,
+            output={
+                "windows": [{"pid": 1234, "process_name": "chrome", "title": "YouTube"}],
+                "count": 1,
+                "summary": "Active windows: YouTube (chrome)",
+            },
+            metadata=ToolExecutionMetadata(duration_ms=10.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="what windows do I have open?"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("YouTube", response.message)
+        self.assertEqual(response.actions[0].tool, "system.list_windows")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_focus_window_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.focus_window": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.focus_window",
+            success=True,
+            output={"target": "notepad", "status": "focused", "message": "Brought notepad to the foreground, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=8.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="switch to notepad window"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("notepad", response.message.lower())
+        self.assertEqual(response.actions[0].tool, "system.focus_window")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_send_keys_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.send_keys": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.send_keys",
+            success=True,
+            output={"text": "git status", "status": "sent", "message": 'Typed "git status", sir.'},
+            metadata=ToolExecutionMetadata(duration_ms=12.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="type 'git status' and press enter"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("git status", response.message)
+        self.assertEqual(response.actions[0].tool, "system.send_keys")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_window_state_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.window_state": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.window_state",
+            success=True,
+            output={"action": "minimize_all", "status": "success", "message": "All desktop windows minimized."},
+            metadata=ToolExecutionMetadata(duration_ms=6.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="minimize all windows"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("minimized", response.message.lower())
+        self.assertEqual(response.actions[0].tool, "system.window_state")
+        self.assertEqual(response.actions[0].status, "success")
+
+
 
 if __name__ == "__main__":
     unittest.main()
