@@ -468,10 +468,15 @@ export function AtlasCore({
         }
 
         void audioFx.playAlert();
-        const errorReply =
-          err instanceof Error
-            ? err.message
-            : "I encountered an issue processing your request, sir. The backend neural core may be reconnecting.";
+        const rawMsg = err instanceof Error ? err.message : "";
+        const isFetchError =
+          rawMsg.toLowerCase().includes("failed to fetch") ||
+          rawMsg.toLowerCase().includes("network error") ||
+          rawMsg.toLowerCase().includes("fetch failed");
+
+        const errorReply = isFetchError
+          ? "The ATLAS neural core backend appears to be offline, sir. Please start the backend service on port 8000 using run_backend.ps1."
+          : rawMsg || "I encountered an issue processing your request, sir. The backend neural core may be reconnecting.";
         setAtlasResponse(errorReply);
         speakAtlas(errorReply);
       }

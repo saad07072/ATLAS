@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     cors_allow_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://172.22.29.152:3000",
     ]
     enable_hsts: bool = False
     max_request_body_bytes: int = 1_048_576  # 1 MB
