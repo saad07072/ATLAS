@@ -44,7 +44,15 @@ interface SpeechRecognitionLike {
   stop: () => void;
 }
 
-export function AtlasCore(): JSX.Element {
+export interface AtlasCoreProps {
+  initialMini?: boolean;
+  isStandaloneOverlay?: boolean;
+}
+
+export function AtlasCore({
+  initialMini = false,
+  isStandaloneOverlay = false,
+}: AtlasCoreProps = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Core State
@@ -62,6 +70,8 @@ export function AtlasCore(): JSX.Element {
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
   const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
+  const [isMiniMode, setIsMiniMode] = useState<boolean>(initialMini);
+  const isMiniModeRef = useRef<boolean>(initialMini);
   const lastTelemetryTimeRef = useRef<number>(0);
   const [textInput, setTextInput] = useState("");
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -97,6 +107,10 @@ export function AtlasCore(): JSX.Element {
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
+
+  useEffect(() => {
+    isMiniModeRef.current = isMiniMode;
+  }, [isMiniMode]);
 
   // Safe Recognition Starter (declared early so speakAtlas can call it safely)
   const startRecognitionSafe = useCallback(() => {
@@ -599,6 +613,10 @@ export function AtlasCore(): JSX.Element {
           accumulatedTextRef.current = "";
           void sendToAtlas(query);
         }
+      } else if ((e.code === "KeyM" && e.altKey) || (e.code === "KeyM" && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        void audioFx.playUiTap();
+        setIsMiniMode((prev) => !prev);
       } else if (e.code === "Escape") {
         if (atlasStateRef.current === "processing") {
           abortCurrentTask();
@@ -628,8 +646,13 @@ export function AtlasCore(): JSX.Element {
     let pulseAngle = 0;
 
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (isMiniModeRef.current) {
+        canvas.width = canvas.parentElement?.clientWidth || 390;
+        canvas.height = canvas.parentElement?.clientHeight || 540;
+      } else {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
     };
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
@@ -649,7 +672,8 @@ export function AtlasCore(): JSX.Element {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const centerY = isMiniModeRef.current ? canvas.height * 0.35 : canvas.height / 2;
+      const miniScale = isMiniModeRef.current ? 0.6 : 1.0;
 
       // Extract real-time frequency data
       let audioLevel = 0;
@@ -697,7 +721,7 @@ export function AtlasCore(): JSX.Element {
 
       const dynamicPulse = Math.sin(pulseAngle) * 6;
       const speechPulse = isSpeakingState ? Math.sin(pulseAngle * 3.5) * 14 : 0;
-      const baseRadius = 115 + dynamicPulse + speechPulse + audioLevel * 45;
+      const baseRadius = (115 + dynamicPulse + speechPulse + audioLevel * 45) * miniScale;
 
       // State-specific Neon Glow Themes
       const glowColor = isSpeakingState
@@ -897,7 +921,7 @@ export function AtlasCore(): JSX.Element {
 
   return (
     <div
-      className="atlas-viewport"
+      className={`atlas-viewport${isMiniMode ? " mini-mode" : ""}${isStandaloneOverlay ? " standalone-overlay" : ""}`}
       onClick={() => {
         if (!isActive) {
           void activateAtlas();
@@ -969,6 +993,18 @@ export function AtlasCore(): JSX.Element {
         </div>
 
         <div className="hud-buttons-row">
+          <button
+            type="button"
+            className="hud-console-trigger"
+            onClick={(e) => {
+              e.stopPropagation();
+              void audioFx.playUiTap();
+              setIsMiniMode(!isMiniMode);
+            }}
+            title={isMiniMode ? "Expand to Fullscreen HUD (Alt+M)" : "Collapse to Floating Mini-HUD (Alt+M)"}
+          >
+            {isMiniMode ? "[ ⛶ FULL HUD ]" : "[ 📌 MINI HUD ]"}
+          </button>
           <button
             type="button"
             className={`hud-console-trigger ${isSfxMuted ? "sfx-muted" : "sfx-active"}`}
