@@ -8,7 +8,18 @@ import type {
 } from "@/types";
 import { getSupabaseAccessToken } from "@/services/supabase";
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001";
+const CANDIDATE_API_BASE_URLS = Array.from(
+  new Set([
+    process.env.NEXT_PUBLIC_API_BASE_URL,
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001",
+    "http://localhost:8000",
+    "http://localhost:8001",
+  ].filter(Boolean) as string[])
+);
+
+let activeApiBaseUrl: string =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 
 export interface ChatHistoryMessage {
   role: "user" | "assistant";
@@ -68,19 +79,43 @@ export class ApiError extends Error {
   }
 }
 
-export const apiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
+export const apiBaseUrl = activeApiBaseUrl;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const accessToken = (await getSupabaseAccessToken()) || "atlas-dev-bearer-token";
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const headers = {
+    Accept: "application/json",
+    ...(init?.headers ?? {}),
+    Authorization: `Bearer ${accessToken}`,
+  };
+
+  const candidateUrls = [
+    activeApiBaseUrl,
+    ...CANDIDATE_API_BASE_URLS.filter((u) => u !== activeApiBaseUrl),
+  ];
+
+  let response: Response | null = null;
+  for (const candidate of candidateUrls) {
+    try {
+      response = await fetch(`${candidate}${path}`, {
+        ...init,
+        headers,
+      });
+      activeApiBaseUrl = candidate;
+      break;
+    } catch {
+      // Port unreachable or refused, try next candidate port
+      continue;
+    }
+  }
+
+  if (!response) {
+    throw new ApiError(
+      0,
+      "The ATLAS neural backend appears to be offline or unreachable on ports 8000 and 8001, sir. Please start the backend service via 'run_backend.ps1' or 'python -m uvicorn backend.app.main:app'.",
+      "network_error",
+    );
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as

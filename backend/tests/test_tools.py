@@ -363,6 +363,42 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertIn("system.open_app", names)
         self.assertIn("system.datetime", names)
         self.assertIn("web.search", names)
+        self.assertIn("system.list_windows", names)
+        self.assertIn("system.focus_window", names)
+        self.assertIn("system.send_keys", names)
+        self.assertIn("system.window_state", names)
+
+    def test_list_windows_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import ListWindowsTool, ListWindowsInput
+        tool = ListWindowsTool()
+        res = tool.execute(ListWindowsInput(filter=""))
+        self.assertEqual(res.verified, True)
+        self.assertGreaterEqual(res.count, 1)
+        self.assertIn("desktop", res.summary.lower())
+
+    def test_focus_window_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import FocusWindowTool, FocusWindowInput
+        tool = FocusWindowTool()
+        res = tool.execute(FocusWindowInput(target="notepad"))
+        self.assertEqual(res.status, "focused")
+        self.assertEqual(res.verified, True)
+        self.assertIn("notepad", res.message)
+
+    def test_send_keys_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import SendKeysTool, SendKeysInput
+        tool = SendKeysTool()
+        res = tool.execute(SendKeysInput(text="echo hello", target_window="terminal", press_enter=True))
+        self.assertEqual(res.status, "sent")
+        self.assertEqual(res.verified, True)
+        self.assertIn("echo hello", res.message)
+
+    def test_window_state_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import WindowStateTool, WindowStateInput
+        tool = WindowStateTool()
+        res = tool.execute(WindowStateInput(action="minimize_all"))
+        self.assertEqual(res.status, "success")
+        self.assertEqual(res.verified, True)
+        self.assertIn("minimized", res.message.lower())
 
 
 if __name__ == "__main__":

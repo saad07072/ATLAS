@@ -27,6 +27,10 @@ class PermissionId(StrEnum):
     SYSTEM_FILE_WRITE = "system.file_write"
     SYSTEM_DATETIME = "system.datetime"
     SYSTEM_CLOSE_APP = "system.close_app"
+    SYSTEM_LIST_WINDOWS = "system.list_windows"
+    SYSTEM_FOCUS_WINDOW = "system.focus_window"
+    SYSTEM_SEND_KEYS = "system.send_keys"
+    SYSTEM_WINDOW_STATE = "system.window_state"
     WEB_CLOSE = "web.close"
 
 

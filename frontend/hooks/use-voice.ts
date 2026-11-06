@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { audioFx } from "@/services/audio-fx";
 import {
   cleanTextForSpeech,
   getVoiceSettings,
@@ -188,6 +189,7 @@ export function useVoice(): UseVoiceReturn {
 
         recognition.onstart = (): void => {
           setRecognitionState("listening");
+          void audioFx.playListenStart();
         };
 
         recognition.onresult = (event: SpeechRecognitionEvent): void => {
@@ -226,6 +228,7 @@ export function useVoice(): UseVoiceReturn {
               "Speech recognition network error occurred. Please try again.",
             );
           } else if (event.error !== "aborted") {
+            void audioFx.playAlert();
             setRecognitionState("error");
             setRecognitionError(`Speech recognition error: ${event.error}`);
           }
@@ -238,6 +241,7 @@ export function useVoice(): UseVoiceReturn {
           setInterimTranscript("");
           const fullResult = accumulatedFinalRef.current.trim();
           if (fullResult && onTranscriptReadyRef.current) {
+            void audioFx.playCommit();
             onTranscriptReadyRef.current(fullResult);
           }
           activeRecognitionRef.current = null;

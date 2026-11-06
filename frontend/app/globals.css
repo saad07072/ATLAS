@@ -2176,6 +2176,19 @@ img {
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.45) !important;
 }
 
+.hud-console-trigger.sfx-muted {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+}
+
+.hud-console-trigger.sfx-active {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.4);
+  color: #00f0ff;
+}
+
 .atlas-command-bar {
   display: flex;
   align-items: center;
@@ -2261,4 +2274,102 @@ img {
 
 .atlas-screen-toggle-btn:hover {
   transform: scale(1.03);
+}
+
+
+/* ========================================================================= */
+/* MINI-HUD FLOATING OVERLAY MODE                                            */
+/* ========================================================================= */
+
+.atlas-viewport.mini-mode {
+  position: fixed !important;
+  inset: auto 24px 24px auto !important;
+  width: min(400px, 94vw) !important;
+  height: 560px !important;
+  max-height: 85vh !important;
+  border-radius: 24px !important;
+  background: radial-gradient(130% 130% at 50% 0%, rgba(10, 32, 60, 0.94) 0%, rgba(2, 12, 24, 0.98) 100%) !important;
+  backdrop-filter: blur(36px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(200%) !important;
+  border: 1.5px solid rgba(0, 240, 255, 0.45) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75), 0 0 30px rgba(0, 240, 255, 0.25), inset 0 1px 2px rgba(255, 255, 255, 0.4) !important;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  z-index: 9999 !important;
+}
+
+.atlas-viewport.mini-mode .atlas-hud-top-left {
+  top: 0.9rem !important;
+  left: 1rem !important;
+  padding: 0.45rem 0.75rem !important;
+  gap: 0.2rem !important;
+}
+
+.atlas-viewport.mini-mode .hud-sub,
+.atlas-viewport.mini-mode .atlas-hud-top-left .hud-telemetry-row {
+  display: none !important;
+}
+
+.atlas-viewport.mini-mode .atlas-hud-top-right {
+  top: 0.9rem !important;
+  right: 1rem !important;
+  gap: 0.2rem !important;
+}
+
+.atlas-viewport.mini-mode .atlas-hud-top-right .hud-telemetry-row,
+.atlas-viewport.mini-mode .atlas-hud-top-right .hud-badge {
+  display: none !important;
+}
+
+.atlas-viewport.mini-mode .atlas-hud-bottom-left {
+  display: none !important;
+}
+
+.atlas-viewport.mini-mode .atlas-dialogue-hud {
+  bottom: 0.9rem !important;
+  width: 92% !important;
+  gap: 0.45rem !important;
+}
+
+.atlas-viewport.mini-mode .dialogue-bubble {
+  padding: 0.65rem 0.9rem !important;
+  max-height: 130px !important;
+  overflow-y: auto !important;
+}
+
+.atlas-viewport.mini-mode .dialogue-text {
+  font-size: 0.88rem !important;
+  line-height: 1.45 !important;
+}
+
+.atlas-viewport.mini-mode .hud-buttons-row {
+  margin-top: 0 !important;
+  gap: 0.3rem !important;
+}
+
+.atlas-viewport.mini-mode .hud-console-trigger {
+  padding: 0.25rem 0.55rem !important;
+  font-size: 0.65rem !important;
+}
+
+.atlas-viewport.mini-mode .atlas-command-bar {
+  padding: 0.2rem 0.35rem 0.2rem 0.75rem !important;
+}
+
+.atlas-viewport.mini-mode .atlas-command-input {
+  font-size: 0.82rem !important;
+}
+
+.atlas-viewport.mini-mode .atlas-cue {
+  font-size: 0.72rem !important;
+  letter-spacing: 0.1em !important;
+}
+
+/* Standalone Desktop Overlay Mode */
+.atlas-viewport.standalone-overlay {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
 }

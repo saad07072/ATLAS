@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
 import { sendChatMessage, type ActionRecord } from "@/services/api";
+import { audioFx } from "@/services/audio-fx";
 
 export type AtlasState = "standby" | "listening" | "processing" | "speaking";
 
@@ -43,7 +44,15 @@ interface SpeechRecognitionLike {
   stop: () => void;
 }
 
-export function AtlasCore(): JSX.Element {
+export interface AtlasCoreProps {
+  initialMini?: boolean;
+  isStandaloneOverlay?: boolean;
+}
+
+export function AtlasCore({
+  initialMini = false,
+  isStandaloneOverlay = false,
+}: AtlasCoreProps = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Core State
@@ -60,6 +69,10 @@ export function AtlasCore(): JSX.Element {
   });
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
+  const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
+  const [isMiniMode, setIsMiniMode] = useState<boolean>(initialMini);
+  const isMiniModeRef = useRef<boolean>(initialMini);
+  const lastTelemetryTimeRef = useRef<number>(0);
   const [textInput, setTextInput] = useState("");
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -94,6 +107,10 @@ export function AtlasCore(): JSX.Element {
   useEffect(() => {
     isActiveRef.current = isActive;
   }, [isActive]);
+
+  useEffect(() => {
+    isMiniModeRef.current = isMiniMode;
+  }, [isMiniMode]);
 
   // Safe Recognition Starter (declared early so speakAtlas can call it safely)
   const startRecognitionSafe = useCallback(() => {
@@ -218,12 +235,14 @@ export function AtlasCore(): JSX.Element {
     const handleSpeechComplete = () => {
       if (fallbackTimer) clearTimeout(fallbackTimer);
       setAtlasState("standby");
+      void audioFx.playStandby();
       setTimeout(() => {
         isBusyRef.current = false;
         accumulatedTextRef.current = "";
         setTranscript("");
         if (isActiveRef.current) {
           setAtlasState("listening");
+          void audioFx.playListenStart();
           startRecognitionSafe();
         }
       }, 450);
@@ -290,7 +309,17 @@ export function AtlasCore(): JSX.Element {
     }
   }, [speakAtlas, stopScreenShare]);
 
+  const toggleSfx = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const nextMuted = audioFx.toggleMute();
+    setIsSfxMuted(nextMuted);
+    if (!nextMuted) {
+      void audioFx.playUiTap();
+    }
+  }, []);
+
   const toggleScreenShare = useCallback(() => {
+    void audioFx.playUiTap();
     if (isScreenShared) {
       stopScreenShare();
     } else {
@@ -411,6 +440,11 @@ export function AtlasCore(): JSX.Element {
         if (data.actions && data.actions.length > 0) {
           const act = data.actions[0];
           setLastAction(act);
+          if (act.status === "success") {
+            void audioFx.playSuccess();
+          } else {
+            void audioFx.playAlert();
+          }
           setTimeout(() => {
             setLastAction(null);
           }, 9000);
@@ -433,10 +467,16 @@ export function AtlasCore(): JSX.Element {
           return;
         }
 
-        const errorReply =
-          err instanceof Error
-            ? err.message
-            : "I encountered an issue processing your request, sir. The backend neural core may be reconnecting.";
+        void audioFx.playAlert();
+        const rawMsg = err instanceof Error ? err.message : "";
+        const isFetchError =
+          rawMsg.toLowerCase().includes("failed to fetch") ||
+          rawMsg.toLowerCase().includes("network error") ||
+          rawMsg.toLowerCase().includes("fetch failed");
+
+        const errorReply = isFetchError
+          ? "The ATLAS neural core backend appears to be offline, sir. Please start the backend service on port 8000 using run_backend.ps1."
+          : rawMsg || "I encountered an issue processing your request, sir. The backend neural core may be reconnecting.";
         setAtlasResponse(errorReply);
         speakAtlas(errorReply);
       }
@@ -505,6 +545,7 @@ export function AtlasCore(): JSX.Element {
         if (!isBusyRef.current && accumulatedTextRef.current.trim()) {
           const textToDispatch = accumulatedTextRef.current.trim();
           accumulatedTextRef.current = "";
+          void audioFx.playCommit();
           setAtlasResponse("Processing request, sir...");
           void sendToAtlas(textToDispatch);
         }
@@ -537,6 +578,7 @@ export function AtlasCore(): JSX.Element {
     try {
       recognition.start();
       setAtlasState("listening");
+      void audioFx.playListenStart();
     } catch {
       // ignore
     }
@@ -549,6 +591,7 @@ export function AtlasCore(): JSX.Element {
     if (isActive) return;
     setIsActive(true);
     isActiveRef.current = true;
+    void audioFx.playBoot();
     await initAudioAnalyser();
     initSpeechRecognition();
 
@@ -575,6 +618,10 @@ export function AtlasCore(): JSX.Element {
           accumulatedTextRef.current = "";
           void sendToAtlas(query);
         }
+      } else if ((e.code === "KeyM" && e.altKey) || (e.code === "KeyM" && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        void audioFx.playUiTap();
+        setIsMiniMode((prev) => !prev);
       } else if (e.code === "Escape") {
         if (atlasStateRef.current === "processing") {
           abortCurrentTask();
@@ -604,8 +651,13 @@ export function AtlasCore(): JSX.Element {
     let pulseAngle = 0;
 
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (isMiniModeRef.current) {
+        canvas.width = canvas.parentElement?.clientWidth || 390;
+        canvas.height = canvas.parentElement?.clientHeight || 540;
+      } else {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
     };
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
@@ -625,7 +677,8 @@ export function AtlasCore(): JSX.Element {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const centerY = isMiniModeRef.current ? canvas.height * 0.35 : canvas.height / 2;
+      const miniScale = isMiniModeRef.current ? 0.6 : 1.0;
 
       // Extract real-time frequency data
       let audioLevel = 0;
@@ -637,11 +690,21 @@ export function AtlasCore(): JSX.Element {
           sum += audioDataRef.current[i];
         }
         audioLevel = sum / (binCount * 255);
-        setTelemetry((prev) => ({
-          ...prev,
-          audioLevel: Math.round(audioLevel * 100),
-          frequency: Math.round(300 + audioLevel * 1200),
-        }));
+        const now = performance.now();
+        if (now - lastTelemetryTimeRef.current > 100) {
+          lastTelemetryTimeRef.current = now;
+          const sampleRate = audioContextRef.current?.sampleRate || 44100;
+          const dominantFreq = audioFx.calculateDominantFrequency(
+            analyserRef.current,
+            sampleRate,
+            audioDataRef.current as unknown as Uint8Array,
+          );
+          setTelemetry((prev) => ({
+            ...prev,
+            audioLevel: Math.round(audioLevel * 100),
+            frequency: dominantFreq,
+          }));
+        }
       }
 
       const currentState = atlasStateRef.current;
@@ -663,7 +726,7 @@ export function AtlasCore(): JSX.Element {
 
       const dynamicPulse = Math.sin(pulseAngle) * 6;
       const speechPulse = isSpeakingState ? Math.sin(pulseAngle * 3.5) * 14 : 0;
-      const baseRadius = 115 + dynamicPulse + speechPulse + audioLevel * 45;
+      const baseRadius = (115 + dynamicPulse + speechPulse + audioLevel * 45) * miniScale;
 
       // State-specific Neon Glow Themes
       const glowColor = isSpeakingState
@@ -863,7 +926,7 @@ export function AtlasCore(): JSX.Element {
 
   return (
     <div
-      className="atlas-viewport"
+      className={`atlas-viewport${isMiniMode ? " mini-mode" : ""}${isStandaloneOverlay ? " standalone-overlay" : ""}`}
       onClick={() => {
         if (!isActive) {
           void activateAtlas();
@@ -937,6 +1000,29 @@ export function AtlasCore(): JSX.Element {
         <div className="hud-buttons-row">
           <button
             type="button"
+            className="hud-console-trigger"
+            onClick={(e) => {
+              e.stopPropagation();
+              void audioFx.playUiTap();
+              setIsMiniMode(!isMiniMode);
+            }}
+            title={isMiniMode ? "Expand to Fullscreen HUD (Alt+M)" : "Collapse to Floating Mini-HUD (Alt+M)"}
+          >
+            {isMiniMode ? "[ ⛶ FULL HUD ]" : "[ 📌 MINI HUD ]"}
+          </button>
+          <button
+            type="button"
+            className={`hud-console-trigger ${isSfxMuted ? "sfx-muted" : "sfx-active"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSfx(e);
+            }}
+            title={isSfxMuted ? "Unmute procedural sound FX" : "Mute procedural sound FX"}
+          >
+            {isSfxMuted ? "[ 🔇 SFX MUTED ]" : "[ 🔊 SFX ACTIVE ]"}
+          </button>
+          <button
+            type="button"
             className={`hud-console-trigger ${isScreenShared ? "vision-active" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
@@ -951,6 +1037,7 @@ export function AtlasCore(): JSX.Element {
             className="hud-console-trigger"
             onClick={(e) => {
               e.stopPropagation();
+              void audioFx.playUiTap();
               setHudConsoleOpen(!hudConsoleOpen);
             }}
             title="Toggle System Management Console"
