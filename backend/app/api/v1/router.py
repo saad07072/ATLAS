@@ -7,6 +7,7 @@ from backend.app.api.v1.dashboard import router as dashboard_router
 from backend.app.api.v1.github import router as github_router
 from backend.app.api.v1.google import router as google_router
 from backend.app.api.v1.memory import router as memory_router
+from backend.app.api.v1.system import router as system_router
 from backend.app.api.v1.workflows import router as workflows_router
 
 router = APIRouter(prefix="/api/v1")
@@ -17,4 +18,5 @@ router.include_router(dashboard_router)
 router.include_router(google_router)
 router.include_router(github_router)
 router.include_router(memory_router)
+router.include_router(system_router)
 router.include_router(workflows_router)

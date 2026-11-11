@@ -31,6 +31,11 @@ class PermissionId(StrEnum):
     SYSTEM_FOCUS_WINDOW = "system.focus_window"
     SYSTEM_SEND_KEYS = "system.send_keys"
     SYSTEM_WINDOW_STATE = "system.window_state"
+    SYSTEM_MEDIA_CONTROL = "system.media_control"
+    SYSTEM_VOLUME_CONTROL = "system.volume_control"
+    SYSTEM_VITALS = "system.vitals"
+    SYSTEM_LOCK_PC = "system.lock_pc"
+    SYSTEM_EXECUTE_PROTOCOL = "system.execute_protocol"
     WEB_CLOSE = "web.close"
 
 

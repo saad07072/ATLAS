@@ -4,7 +4,8 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
-import { sendChatMessage, type ActionRecord } from "@/services/api";
+import { sendChatMessage, getSystemVitals, type ActionRecord } from "@/services/api";
+import type { SystemVitals } from "@/types";
 import { audioFx } from "@/services/audio-fx";
 
 export type AtlasState = "standby" | "listening" | "processing" | "speaking";
@@ -67,11 +68,43 @@ export function AtlasCore({
     audioLevel: 0,
     activeVoice: "Detecting neural voice...",
   });
+  const [vitals, setVitals] = useState<SystemVitals | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchVitals = async () => {
+      try {
+        const data = await getSystemVitals();
+        if (isMounted) {
+          setVitals(data);
+        }
+      } catch {
+        // Fallback silently if server temporarily offline
+      }
+    };
+    fetchVitals();
+    const interval = setInterval(fetchVitals, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
   const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
   const [isMiniMode, setIsMiniMode] = useState<boolean>(initialMini);
   const isMiniModeRef = useRef<boolean>(initialMini);
+
+  // Wake-Word & Follow-Up State
+  const [isWakeWordEnabled, setIsWakeWordEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("atlas_wake_word_enabled");
+    return saved === null ? true : saved === "true";
+  });
+  const isWakeWordEnabledRef = useRef<boolean>(true);
+  const [wakeWordTriggered, setWakeWordTriggered] = useState<boolean>(false);
+  const wakeWordExpiryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const followUpTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastTelemetryTimeRef = useRef<number>(0);
   const [textInput, setTextInput] = useState("");
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -111,6 +144,13 @@ export function AtlasCore({
   useEffect(() => {
     isMiniModeRef.current = isMiniMode;
   }, [isMiniMode]);
+
+  useEffect(() => {
+    isWakeWordEnabledRef.current = isWakeWordEnabled;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("atlas_wake_word_enabled", String(isWakeWordEnabled));
+    }
+  }, [isWakeWordEnabled]);
 
   // Safe Recognition Starter (declared early so speakAtlas can call it safely)
   const startRecognitionSafe = useCallback(() => {
@@ -240,10 +280,19 @@ export function AtlasCore({
         isBusyRef.current = false;
         accumulatedTextRef.current = "";
         setTranscript("");
-        if (isActiveRef.current) {
+        if (isActiveRef.current || isWakeWordEnabledRef.current) {
+          // Open follow-up listening window for continuous conversation
           setAtlasState("listening");
           void audioFx.playListenStart();
           startRecognitionSafe();
+
+          if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
+          followUpTimerRef.current = setTimeout(() => {
+            if (!isBusyRef.current && atlasStateRef.current === "listening" && !accumulatedTextRef.current.trim()) {
+              setAtlasState("standby");
+              void audioFx.playStandby();
+            }
+          }, 7000);
         }
       }, 450);
     };
@@ -531,8 +580,61 @@ export function AtlasCore({
       const activeText = (final || interim).trim();
       if (!activeText) return;
 
-      setTranscript(activeText);
-      accumulatedTextRef.current = activeText;
+      const WAKE_WORD_PATTERN = /\b(?:hey\s+atlas|ok\s+atlas|atlas|hey\s+jarvis|jarvis)\b/i;
+
+      // 1. Passive Wake-Word Standby Interception
+      if (atlasStateRef.current === "standby") {
+        if (!isWakeWordEnabledRef.current) return;
+
+        if (WAKE_WORD_PATTERN.test(activeText)) {
+          void audioFx.playListenStart();
+          isActiveRef.current = true;
+          setIsActive(true);
+          setWakeWordTriggered(true);
+          if (wakeWordExpiryTimerRef.current) clearTimeout(wakeWordExpiryTimerRef.current);
+          wakeWordExpiryTimerRef.current = setTimeout(() => setWakeWordTriggered(false), 8000);
+
+          const commandText = activeText.replace(WAKE_WORD_PATTERN, "").replace(/^[,.\s]+/, "").trim();
+
+          if (commandText.length > 0) {
+            setTranscript(commandText);
+            accumulatedTextRef.current = commandText;
+            setAtlasState("listening");
+
+            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = setTimeout(() => {
+              if (!isBusyRef.current && accumulatedTextRef.current.trim()) {
+                const textToDispatch = accumulatedTextRef.current.trim();
+                accumulatedTextRef.current = "";
+                void audioFx.playCommit();
+                setAtlasResponse("Processing request, sir...");
+                void sendToAtlas(textToDispatch);
+              }
+            }, 380);
+          } else {
+            setTranscript("");
+            accumulatedTextRef.current = "";
+            setAtlasState("listening");
+            setAtlasResponse("Listening, sir. How may I assist?");
+
+            if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
+            followUpTimerRef.current = setTimeout(() => {
+              if (!isBusyRef.current && atlasStateRef.current === "listening" && !accumulatedTextRef.current.trim()) {
+                setAtlasState("standby");
+                void audioFx.playStandby();
+              }
+            }, 7000);
+          }
+        }
+        return;
+      }
+
+      // 2. Active Speech Recognition Mode
+      if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
+
+      const cleanActive = activeText.replace(WAKE_WORD_PATTERN, "").replace(/^[,.\s]+/, "").trim() || activeText;
+      setTranscript(cleanActive);
+      accumulatedTextRef.current = cleanActive;
       setAtlasState("listening");
 
       // Industry-Standard Voice Activity Detection (VAD) Silence Dispatcher:
@@ -560,9 +662,9 @@ export function AtlasCore({
 
     recognition.onend = () => {
       // ONLY restart if ATLAS is NOT busy (i.e. not processing or speaking)
-      if (isActiveRef.current && !isBusyRef.current) {
+      if ((isActiveRef.current || isWakeWordEnabledRef.current) && !isBusyRef.current) {
         setTimeout(() => {
-          if (isActiveRef.current && !isBusyRef.current) {
+          if ((isActiveRef.current || isWakeWordEnabledRef.current) && !isBusyRef.current) {
             try {
               recognition.start();
             } catch {
@@ -974,6 +1076,28 @@ export function AtlasCore({
           <span>SYSTEM DIAGNOSTICS</span>
           <span className="hud-dot green" />
         </div>
+        {vitals && (
+          <>
+            <div className="hud-telemetry-row right-aligned">
+              <span>CPU LOAD:</span>
+              <span className="hud-val">{vitals.cpu_percent}%</span>
+            </div>
+            <div className="hud-telemetry-row right-aligned">
+              <span>RAM USAGE:</span>
+              <span className="hud-val">{vitals.memory_used_gb}/{vitals.memory_total_gb} GB ({vitals.memory_percent}%)</span>
+            </div>
+            {vitals.battery_percent !== null && (
+              <div className="hud-telemetry-row right-aligned">
+                <span>BATTERY:</span>
+                <span className="hud-val">{vitals.battery_percent}% [{vitals.battery_plugged}]</span>
+              </div>
+            )}
+            <div className="hud-telemetry-row right-aligned">
+              <span>DISK FREE:</span>
+              <span className="hud-val">{vitals.disk_free_gb} GB ({vitals.disk_percent}%)</span>
+            </div>
+          </>
+        )}
         <div className="hud-telemetry-row right-aligned">
           <span>FREQUENCY:</span>
           <span className="hud-val">{telemetry.frequency} HZ</span>
@@ -1009,6 +1133,21 @@ export function AtlasCore({
             title={isMiniMode ? "Expand to Fullscreen HUD (Alt+M)" : "Collapse to Floating Mini-HUD (Alt+M)"}
           >
             {isMiniMode ? "[ ⛶ FULL HUD ]" : "[ 📌 MINI HUD ]"}
+          </button>
+          <button
+            type="button"
+            className={`hud-console-trigger ${isWakeWordEnabled ? "wakeword-active" : "wakeword-muted"}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void audioFx.playUiTap();
+              setIsWakeWordEnabled(!isWakeWordEnabled);
+              if (!isWakeWordEnabled) {
+                startRecognitionSafe();
+              }
+            }}
+            title={isWakeWordEnabled ? "Mute 'Hey ATLAS' passive wake-word listener" : "Enable hands-free 'Hey ATLAS' wake-word listener"}
+          >
+            {isWakeWordEnabled ? "[ ⚡ WAKE WORD: ON ]" : "[ 💤 WAKE WORD: OFF ]"}
           </button>
           <button
             type="button"
@@ -1067,6 +1206,14 @@ export function AtlasCore({
 
       {/* 5. Center-Bottom Floating Holographic Transcript */}
       <div className="atlas-dialogue-hud">
+        {/* Wake Word Recognition Banner */}
+        {wakeWordTriggered && (
+          <div className="wakeword-banner">
+            <span className="hud-dot green" />
+            <span>⚡ WAKE WORD DETECTED // NEURAL EAR ENGAGED</span>
+          </div>
+        )}
+
         {/* User Input Stream */}
         {transcript && (
           <div className="dialogue-bubble user-stream">

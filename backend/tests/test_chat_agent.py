@@ -530,6 +530,100 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].tool, "system.window_state")
         self.assertEqual(response.actions[0].status, "success")
 
+    def test_system_media_control_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.media_control": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.media_control",
+            success=True,
+            output={"action": "pause", "status": "success", "message": "Paused media playback, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="pause music"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Paused media playback", response.message)
+        self.assertEqual(response.actions[0].tool, "system.media_control")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_volume_control_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.volume_control": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.volume_control",
+            success=True,
+            output={"action": "set", "percent": 50, "status": "success", "message": "Set master volume to 50%, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="set volume to 50%"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("50%", response.message)
+        self.assertEqual(response.actions[0].tool, "system.volume_control")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_vitals_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.vitals": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.vitals",
+            success=True,
+            output={"status": "success", "summary": "System diagnostics nominal, sir: CPU at 20%, RAM at 50%."},
+            metadata=ToolExecutionMetadata(duration_ms=10.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="system diagnostics"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("System diagnostics nominal", response.message)
+        self.assertEqual(response.actions[0].tool, "system.vitals")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_system_lock_pc_dispatched(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.lock_pc": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.lock_pc",
+            success=True,
+            output={"status": "success", "message": "Workstation locked, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="lock my pc"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Workstation locked", response.message)
+        self.assertEqual(response.actions[0].tool, "system.lock_pc")
+        self.assertEqual(response.actions[0].status, "success")
+
+    def test_chat_agent_handles_protocol_focus_mode(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.execute_protocol": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.execute_protocol",
+            success=True,
+            output={
+                "protocol": "focus_mode",
+                "status": "success",
+                "message": "Focus Mode protocol engaged, sir.",
+                "executed_steps": [
+                    {"tool": "system.window_state", "target": "all_windows", "status": "success", "message": "Minimized clutter", "verified": True},
+                    {"tool": "system.open_app", "target": "code", "status": "success", "message": "Primed VS Code", "verified": True},
+                ]
+            },
+            metadata=ToolExecutionMetadata(duration_ms=25.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="activate focus mode protocol"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Focus Mode", response.message)
+        self.assertEqual(len(response.actions), 2)
+        self.assertEqual(response.actions[0].tool, "system.window_state")
+        self.assertEqual(response.actions[1].tool, "system.open_app")
+
 
 
 if __name__ == "__main__":

@@ -137,5 +137,18 @@ export interface DashboardResponse {
   system_status: DashboardSystemStatus;
 }
 
+
+export interface SystemVitals {
+  cpu_percent: number;
+  memory_used_gb: number;
+  memory_total_gb: number;
+  memory_percent: number;
+  disk_free_gb: number;
+  disk_total_gb: number;
+  disk_percent: number;
+  battery_percent: number | null;
+  battery_plugged: string | null;
+}
+
 export * from "./speech";
 export * from "./workflow";

@@ -400,6 +400,63 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertEqual(res.verified, True)
         self.assertIn("minimized", res.message.lower())
 
+    def test_media_control_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import MediaControlTool, MediaControlInput
+        tool = MediaControlTool()
+        res = tool.execute(MediaControlInput(action="play_pause"))
+        self.assertEqual(res.status, "success")
+        self.assertTrue(res.verified)
+
+    def test_volume_control_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import VolumeControlTool, VolumeControlInput
+        tool = VolumeControlTool()
+        res = tool.execute(VolumeControlInput(action="up"))
+        self.assertEqual(res.status, "success")
+        self.assertTrue(res.verified)
+
+    def test_system_vitals_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import SystemVitalsTool, SystemVitalsInput
+        tool = SystemVitalsTool()
+        res = tool.execute(SystemVitalsInput(detail_level="summary"))
+        self.assertEqual(res.status, "success")
+        self.assertTrue(res.verified)
+        self.assertGreater(res.memory_total_gb, 0)
+        self.assertIn("diagnostics", res.summary.lower())
+
+    def test_lock_workstation_tool_execution(self) -> None:
+        import sys
+        import ctypes
+        from backend.app.tools.system_tools import LockWorkstationTool, LockWorkstationInput
+        tool = LockWorkstationTool()
+        if sys.platform == "win32" and hasattr(ctypes, "windll"):
+            with unittest.mock.patch("ctypes.windll.user32.LockWorkStation"):
+                res = tool.execute(LockWorkstationInput())
+                self.assertEqual(res.status, "success")
+                self.assertTrue(res.verified)
+        else:
+            res = tool.execute(LockWorkstationInput())
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+
+    def test_protocol_execution_tool_focus_mode(self) -> None:
+        from backend.app.tools.system_tools import ProtocolExecutionTool, ProtocolExecutionInput
+        tool = ProtocolExecutionTool()
+        with unittest.mock.patch("subprocess.Popen"), unittest.mock.patch("subprocess.run"):
+            res = tool.execute(ProtocolExecutionInput(protocol="focus_mode"))
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+            self.assertGreaterEqual(len(res.executed_steps), 1)
+            self.assertIn("focus mode", res.message.lower())
+
+    def test_protocol_execution_tool_dev_setup(self) -> None:
+        from backend.app.tools.system_tools import ProtocolExecutionTool, ProtocolExecutionInput
+        tool = ProtocolExecutionTool()
+        with unittest.mock.patch("subprocess.Popen"), unittest.mock.patch("subprocess.run"):
+            res = tool.execute(ProtocolExecutionInput(protocol="dev_setup"))
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+            self.assertIn("developer setup", res.message.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

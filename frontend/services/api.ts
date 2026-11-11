@@ -5,6 +5,7 @@ import type {
   ConversationSummary,
   MemoryItem,
   MemoryListResponse,
+  SystemVitals,
 } from "@/types";
 import { getSupabaseAccessToken } from "@/services/supabase";
 
@@ -368,4 +369,8 @@ export async function getUserEvents(
 
 export async function getDashboardSummary(): Promise<import("@/types").DashboardResponse> {
   return request<import("@/types").DashboardResponse>("/api/v1/dashboard");
+}
+
+export async function getSystemVitals(): Promise<SystemVitals> {
+  return request<SystemVitals>("/api/v1/system/vitals");
 }
