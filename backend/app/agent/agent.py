@@ -903,6 +903,92 @@ class ChatAgent:
                 actions=[ActionExecutionRecord(tool="system.list_windows", target="desktop", status="failed", message=f"Failed: {result.error}", verified=False)]
             )
 
+        # 12b. Custom Workflow Protocols & Desktop Macros (Focus Mode, Dev Setup, End of Day, Clean Slate, Media Center)
+        protocol_match = re.search(
+            r"\b(?:(?:run|execute|engage|start|activate|trigger|initiate)\s+)?(?:protocol\s+([a-zA-Z_\s-]+)|([a-zA-Z_\s-]+?)\s+protocol)\b",
+            clean_lower,
+        )
+        protocol_name = None
+        if protocol_match:
+            raw_p = (protocol_match.group(1) or protocol_match.group(2) or "").strip()
+            p_norm = raw_p.lower().replace("-", "_").replace(" ", "_")
+            if any(k in p_norm for k in ["focus", "dev", "end_of_day", "clean_slate", "media", "deep_work", "clear_desktop", "purge", "entertainment", "movie"]):
+                protocol_name = p_norm
+        elif re.search(r"\b(?:engage|enter|activate|start)\s+(?:focus\s+mode|deep\s+work)\b", clean_lower):
+            protocol_name = "focus_mode"
+        elif re.search(r"\b(?:setup|start|launch)\s+dev(?:eloper)?\s+environment\b", clean_lower):
+            protocol_name = "dev_setup"
+        elif re.search(r"\b(?:end\s+of\s+day|wrap\s+up\s+(?:the\s+)?day)\b", clean_lower):
+            protocol_name = "end_of_day"
+        elif re.search(r"\b(?:clean\s+slate|clear\s+desktop)\b", clean_lower):
+            protocol_name = "clean_slate"
+        elif re.search(r"\b(?:media\s+center|entertainment\s+mode)\b", clean_lower):
+            protocol_name = "media_center"
+
+        if protocol_name:
+            canonical_name = "focus_mode"
+            if "focus" in protocol_name or "deep" in protocol_name:
+                canonical_name = "focus_mode"
+            elif "dev" in protocol_name or "coding" in protocol_name:
+                canonical_name = "dev_setup"
+            elif "end" in protocol_name or "wrap" in protocol_name:
+                canonical_name = "end_of_day"
+            elif "clean" in protocol_name or "clear" in protocol_name or "purge" in protocol_name:
+                canonical_name = "clean_slate"
+            elif "media" in protocol_name or "movie" in protocol_name or "entertain" in protocol_name:
+                canonical_name = "media_center"
+            else:
+                canonical_name = protocol_name
+
+            result = self.execute_tool_request(
+                ToolExecutionRequest(
+                    name="system.execute_protocol",
+                    arguments={"protocol": canonical_name},
+                )
+            )
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", f"Protocol '{canonical_name}' executed, sir.")
+                raw_steps = result.output.get("executed_steps", [])
+                action_records = []
+                for s in raw_steps:
+                    action_records.append(
+                        ActionExecutionRecord(
+                            tool=s.get("tool", "system.execute_protocol"),
+                            target=s.get("target", canonical_name),
+                            status=s.get("status", "success"),
+                            message=s.get("message", "Executed protocol step"),
+                            verified=bool(s.get("verified", True)),
+                        )
+                    )
+                if not action_records:
+                    action_records.append(
+                        ActionExecutionRecord(
+                            tool="system.execute_protocol",
+                            target=canonical_name,
+                            status="success",
+                            message=msg,
+                            verified=True,
+                        )
+                    )
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=action_records,
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not execute protocol '{canonical_name}', sir: {result.error}",
+                actions=[
+                    ActionExecutionRecord(
+                        tool="system.execute_protocol",
+                        target=canonical_name,
+                        status="failed",
+                        message=f"Failed: {result.error}",
+                        verified=False,
+                    )
+                ],
+            )
+
         # 13. Focus / Switch Application Window
         focus_window_match = re.search(
             r"\b(?:focus|switch\s+to|bring\s+to\s+front|activate)\s+(?:the\s+)?([a-zA-Z0-9_\s.-]+?)(?:\s+window|\s+app)?$",

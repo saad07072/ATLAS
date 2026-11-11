@@ -431,6 +431,25 @@ class ToolFrameworkTests(unittest.TestCase):
             self.assertEqual(res.status, "success")
             self.assertTrue(res.verified)
 
+    def test_protocol_execution_tool_focus_mode(self) -> None:
+        from backend.app.tools.system_tools import ProtocolExecutionTool, ProtocolExecutionInput
+        tool = ProtocolExecutionTool()
+        with unittest.mock.patch("subprocess.Popen"), unittest.mock.patch("subprocess.run"):
+            res = tool.execute(ProtocolExecutionInput(protocol="focus_mode"))
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+            self.assertGreaterEqual(len(res.executed_steps), 1)
+            self.assertIn("focus mode", res.message.lower())
+
+    def test_protocol_execution_tool_dev_setup(self) -> None:
+        from backend.app.tools.system_tools import ProtocolExecutionTool, ProtocolExecutionInput
+        tool = ProtocolExecutionTool()
+        with unittest.mock.patch("subprocess.Popen"), unittest.mock.patch("subprocess.run"):
+            res = tool.execute(ProtocolExecutionInput(protocol="dev_setup"))
+            self.assertEqual(res.status, "success")
+            self.assertTrue(res.verified)
+            self.assertIn("developer setup", res.message.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

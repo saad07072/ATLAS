@@ -598,6 +598,32 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].tool, "system.lock_pc")
         self.assertEqual(response.actions[0].status, "success")
 
+    def test_chat_agent_handles_protocol_focus_mode(self) -> None:
+        from backend.app.tools.models import ToolResult, ToolExecutionMetadata
+        tool_executor = Mock()
+        tool_executor.registry._tools = {"system.execute_protocol": Mock()}
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.execute_protocol",
+            success=True,
+            output={
+                "protocol": "focus_mode",
+                "status": "success",
+                "message": "Focus Mode protocol engaged, sir.",
+                "executed_steps": [
+                    {"tool": "system.window_state", "target": "all_windows", "status": "success", "message": "Minimized clutter", "verified": True},
+                    {"tool": "system.open_app", "target": "code", "status": "success", "message": "Primed VS Code", "verified": True},
+                ]
+            },
+            metadata=ToolExecutionMetadata(duration_ms=25.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        response = agent.respond(ChatRequest(message="activate focus mode protocol"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Focus Mode", response.message)
+        self.assertEqual(len(response.actions), 2)
+        self.assertEqual(response.actions[0].tool, "system.window_state")
+        self.assertEqual(response.actions[1].tool, "system.open_app")
+
 
 
 if __name__ == "__main__":

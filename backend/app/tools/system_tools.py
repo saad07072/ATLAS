@@ -1434,6 +1434,175 @@ class LockWorkstationTool(Tool):
             verified=True,
         )
 
+# ==============================================================================
+# 21. Custom Workflow Protocols & Desktop Macros Tool (system.execute_protocol)
+# ==============================================================================
+
+class ProtocolSubAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tool: str
+    target: str
+    status: str
+    message: str
+    verified: bool = True
+
+
+class ProtocolExecutionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    protocol: str = Field(description="Name of the workflow protocol: focus_mode, dev_setup, end_of_day, clean_slate, media_center")
+
+
+class ProtocolExecutionOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    protocol: str
+    status: str
+    message: str
+    executed_steps: list[ProtocolSubAction] = Field(default_factory=list)
+    verified: bool = True
+
+
+class ProtocolExecutionTool(Tool):
+    name = "system.execute_protocol"
+    description = "Executes multi-app composite desktop workflow protocols and automated macros (e.g. focus_mode, dev_setup, end_of_day, clean_slate, media_center)."
+    input_schema = ProtocolExecutionInput
+    output_schema = ProtocolExecutionOutput
+    permission_required = False
+    permission_id = "system.execute_protocol"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, ProtocolExecutionInput):
+            raise TypeError("ProtocolExecutionTool requires ProtocolExecutionInput arguments.")
+
+        name = arguments.protocol.strip().lower().replace(" ", "_").replace("-", "_")
+        steps: list[ProtocolSubAction] = []
+        msg = f"Protocol '{name}' executed, sir."
+
+        if name in {"focus_mode", "focus", "deep_work"}:
+            # 1. Minimize desktop clutter
+            ws_tool = WindowStateTool()
+            ws_res = ws_tool.execute(WindowStateInput(action="minimize_all"))
+            steps.append(ProtocolSubAction(tool="system.window_state", target="all_windows", status=ws_res.status, message="Minimized background clutter", verified=True))
+
+            # 2. Close distraction applications
+            close_tool = AppCloseTool()
+            for distraction in ["youtube", "reddit", "discord"]:
+                try:
+                    c_res = close_tool.execute(AppCloseInput(target=distraction))
+                    steps.append(ProtocolSubAction(tool="system.close_app", target=distraction, status=c_res.status, message=f"Dismissed {distraction}", verified=True))
+                except Exception:
+                    pass
+
+            # 3. Launch / Focus primary coding environment
+            launch_tool = AppLaunchTool()
+            try:
+                l_res = launch_tool.execute(AppLaunchInput(app_name="code"))
+                steps.append(ProtocolSubAction(tool="system.open_app", target="code", status=l_res.status, message="Primed Visual Studio Code", verified=True))
+            except Exception:
+                pass
+
+            # 4. Level audio volume to 30%
+            vol_tool = VolumeControlTool()
+            try:
+                v_res = vol_tool.execute(VolumeControlInput(action="set", percent=30))
+                steps.append(ProtocolSubAction(tool="system.volume_control", target="master_audio", status=v_res.status, message="Audio leveled to 30%", verified=True))
+            except Exception:
+                pass
+
+            msg = "Focus Mode protocol engaged, sir. Desktop clutter minimized, development environment focused, and audio leveled to 30%."
+
+        elif name in {"dev_setup", "developer_mode", "coding_setup", "dev"}:
+            # 1. Launch VS Code
+            launch_tool = AppLaunchTool()
+            l_res = launch_tool.execute(AppLaunchInput(app_name="code"))
+            steps.append(ProtocolSubAction(tool="system.open_app", target="code", status=l_res.status, message="Launched Visual Studio Code", verified=True))
+
+            # 2. Launch Terminal
+            t_res = launch_tool.execute(AppLaunchInput(app_name="terminal"))
+            steps.append(ProtocolSubAction(tool="system.open_app", target="terminal", status=t_res.status, message="Opened PowerShell Terminal", verified=True))
+
+            # 3. Open local development environment
+            web_tool = WebOpenTool()
+            w_res = web_tool.execute(WebOpenInput(url="http://localhost:3000"))
+            steps.append(ProtocolSubAction(tool="web.open", target="http://localhost:3000", status=w_res.status, message="Opened local environment", verified=True))
+
+            msg = "Developer Setup protocol engaged, sir. Visual Studio Code, Terminal, and local environment launched and primed."
+
+        elif name in {"end_of_day", "good_night", "lockdown", "sleep"}:
+            # 1. Close open scratch apps
+            close_tool = AppCloseTool()
+            for app_to_close in ["notepad", "mspaint"]:
+                try:
+                    c_res = close_tool.execute(AppCloseInput(target=app_to_close))
+                    steps.append(ProtocolSubAction(tool="system.close_app", target=app_to_close, status=c_res.status, message=f"Closed {app_to_close}", verified=True))
+                except Exception:
+                    pass
+
+            # 2. Minimize all remaining windows
+            ws_tool = WindowStateTool()
+            ws_res = ws_tool.execute(WindowStateInput(action="minimize_all"))
+            steps.append(ProtocolSubAction(tool="system.window_state", target="all_windows", status=ws_res.status, message="Minimized desktop windows", verified=True))
+
+            # 3. Mute master audio
+            vol_tool = VolumeControlTool()
+            v_res = vol_tool.execute(VolumeControlInput(action="mute"))
+            steps.append(ProtocolSubAction(tool="system.volume_control", target="master_audio", status=v_res.status, message="Muted master audio", verified=True))
+
+            # 4. Lock workstation
+            lock_tool = LockWorkstationTool()
+            lk_res = lock_tool.execute(LockWorkstationInput())
+            steps.append(ProtocolSubAction(tool="system.lock_pc", target="workstation", status=lk_res.status, message="Workstation locked", verified=True))
+
+            msg = "End of Day protocol completed, sir. Working applications closed, audio muted, and workstation locked. Have a pleasant evening."
+
+        elif name in {"clean_slate", "purge", "clear_desktop"}:
+            # 1. Close common auxiliary utilities
+            close_tool = AppCloseTool()
+            for utility in ["calc", "calculator", "notepad", "mspaint", "spotify"]:
+                try:
+                    c_res = close_tool.execute(AppCloseInput(target=utility))
+                    steps.append(ProtocolSubAction(tool="system.close_app", target=utility, status=c_res.status, message=f"Dismissed {utility}", verified=True))
+                except Exception:
+                    pass
+
+            # 2. Minimize all windows
+            ws_tool = WindowStateTool()
+            ws_res = ws_tool.execute(WindowStateInput(action="minimize_all"))
+            steps.append(ProtocolSubAction(tool="system.window_state", target="all_windows", status=ws_res.status, message="Revealed desktop", verified=True))
+
+            msg = "Clean Slate protocol complete, sir. Auxiliary applications terminated and desktop cleared."
+
+        elif name in {"media_center", "entertainment", "movie_mode"}:
+            # 1. Open YouTube
+            web_tool = WebOpenTool()
+            w_res = web_tool.execute(WebOpenInput(url="https://youtube.com"))
+            steps.append(ProtocolSubAction(tool="web.open", target="https://youtube.com", status=w_res.status, message="Opened YouTube streaming portal", verified=True))
+
+            # 2. Level audio volume to 60%
+            vol_tool = VolumeControlTool()
+            v_res = vol_tool.execute(VolumeControlInput(action="set", percent=60))
+            steps.append(ProtocolSubAction(tool="system.volume_control", target="master_audio", status=v_res.status, message="Audio leveled to 60%", verified=True))
+
+            msg = "Media Center protocol engaged, sir. Streaming portal opened and audio leveled to 60%."
+
+        else:
+            msg = f"Protocol '{name}' is not recognized, sir. Available protocols include: focus mode, dev setup, end of day, clean slate, and media center."
+            return ProtocolExecutionOutput(
+                protocol=name,
+                status="failed",
+                message=msg,
+                executed_steps=[],
+                verified=False,
+            )
+
+        return ProtocolExecutionOutput(
+            protocol=name,
+            status="success",
+            message=msg,
+            executed_steps=steps,
+            verified=True,
+        )
+
 
 def get_all_system_tools() -> list[Tool]:
     return [
@@ -1454,4 +1623,5 @@ def get_all_system_tools() -> list[Tool]:
         VolumeControlTool(),
         SystemVitalsTool(),
         LockWorkstationTool(),
+        ProtocolExecutionTool(),
     ]
