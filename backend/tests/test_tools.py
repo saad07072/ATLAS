@@ -424,9 +424,16 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertIn("diagnostics", res.summary.lower())
 
     def test_lock_workstation_tool_execution(self) -> None:
+        import sys
+        import ctypes
         from backend.app.tools.system_tools import LockWorkstationTool, LockWorkstationInput
         tool = LockWorkstationTool()
-        with unittest.mock.patch("ctypes.windll.user32.LockWorkStation") as mock_lock:
+        if sys.platform == "win32" and hasattr(ctypes, "windll"):
+            with unittest.mock.patch("ctypes.windll.user32.LockWorkStation"):
+                res = tool.execute(LockWorkstationInput())
+                self.assertEqual(res.status, "success")
+                self.assertTrue(res.verified)
+        else:
             res = tool.execute(LockWorkstationInput())
             self.assertEqual(res.status, "success")
             self.assertTrue(res.verified)
