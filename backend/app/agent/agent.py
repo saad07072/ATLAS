@@ -21,6 +21,7 @@ CAPABILITIES_RESPONSE = (
     "inspect and analyze your active screen through multimodal neural vision, "
     "open and close any website or browser tab, launch, focus, and close any desktop application on your Windows PC, "
     "enumerate open windows, simulate keyboard typing and hotkeys, control window states (maximize, minimize, show desktop), "
+    "control media playback (play, pause, skip) and master volume, inspect real-time CPU, RAM, disk, and battery hardware vitals, lock your workstation, "
     "manage your Google Calendar events and find free slots, search and draft Gmail messages, "
     "inspect GitHub repositories, issues, PRs, and workflow runs, "
     "check live global weather, read and write files, and execute safe shell commands with verified proof. "
@@ -991,6 +992,118 @@ class ChatAgent:
                     message=msg,
                     actions=[ActionExecutionRecord(tool="system.window_state", target=target_win, status="success", message=msg, verified=True)]
                 )
+
+        # 16. Media Playback Control (Play, Pause, Next, Previous, Stop)
+        media_match = re.search(
+            r"\b(?:pause\s+(?:music|song|playback|audio)|stop\s+(?:music|song|playback|audio)|play\s+(?:music|song|audio)|resume\s+(?:music|song|playback|audio)|next\s+(?:song|track)|skip\s+(?:song|track)|previous\s+(?:song|track)|last\s+(?:song|track)|unpause)\b",
+            clean_lower,
+        )
+        if media_match:
+            matched_phrase = media_match.group(0)
+            act = "play_pause"
+            if "next" in matched_phrase or "skip" in matched_phrase:
+                act = "next"
+            elif "previous" in matched_phrase or "last" in matched_phrase:
+                act = "previous"
+            elif "pause" in matched_phrase or "stop" in matched_phrase:
+                act = "pause"
+            elif "play" in matched_phrase or "resume" in matched_phrase or "unpause" in matched_phrase:
+                act = "play"
+
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.media_control", arguments={"action": act}))
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", f"Adjusted media playback ({act}), sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.media_control", target="media_player", status="success", message=msg, verified=True)]
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not adjust media playback, sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.media_control", target="media_player", status="failed", message=f"Failed: {result.error}", verified=False)]
+            )
+
+        # 17. Volume & Audio Control (Mute, Unmute, Volume Up, Volume Down, Set Volume)
+        vol_match = re.search(
+            r"\b(?:(?:set\s+)?volume\s+(?:to\s+)?(\d{1,3})%?|(?:turn\s+)?volume\s+(up|down)|(increase|decrease|lower|turn\s+up|turn\s+down)\s+volume|(mute|unmute)\s*(?:audio|volume|sound|computer)?)\b",
+            clean_lower,
+        )
+        if vol_match:
+            pct_val = None
+            if vol_match.group(1):
+                try:
+                    pct_val = int(vol_match.group(1))
+                    act = "set"
+                except ValueError:
+                    pct_val = None
+                    act = "up"
+            elif vol_match.group(2):
+                act = vol_match.group(2)
+            elif vol_match.group(3):
+                act = "up" if "up" in vol_match.group(3) or "increase" in vol_match.group(3) else "down"
+            elif vol_match.group(4):
+                act = vol_match.group(4)
+            else:
+                act = "up" if "up" in clean_lower else "down"
+
+            args = {"action": act}
+            if pct_val is not None:
+                args["percent"] = pct_val
+
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.volume_control", arguments=args))
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", f"Adjusted audio volume, sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.volume_control", target="master_audio", status="success", message=msg, verified=True)]
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not adjust volume, sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.volume_control", target="master_audio", status="failed", message=f"Failed: {result.error}", verified=False)]
+            )
+
+        # 18. System Hardware Diagnostics & Vitals (CPU, RAM, Disk, Battery)
+        vitals_match = re.search(
+            r"\b(?:system\s+(?:diagnostics|vitals|health|status)|hardware\s+(?:status|diagnostics|vitals|health)|check\s+(?:system|hardware|vitals|cpu|ram|battery|specs)|how\s+is\s+my\s+(?:pc|computer|system)\s+doing|how\s+much\s+(?:ram|memory|disk)\s+is\s+free|pc\s+status|diagnostic\s+report)\b",
+            clean_lower,
+        )
+        if vitals_match:
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.vitals", arguments={"detail_level": "summary"}))
+            if result.success and isinstance(result.output, dict):
+                summary = result.output.get("summary", "System diagnostics nominal, sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=summary,
+                    actions=[ActionExecutionRecord(tool="system.vitals", target="hardware_telemetry", status="success", message=summary, verified=True)]
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not retrieve hardware diagnostics, sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.vitals", target="hardware_telemetry", status="failed", message=f"Failed: {result.error}", verified=False)]
+            )
+
+        # 19. Workstation Security & Lock Screen
+        lock_match = re.search(
+            r"\b(?:lock\s+(?:my\s+)?(?:pc|computer|screen|workstation|desktop)|secure\s+(?:my\s+)?(?:workstation|pc|desktop))\b",
+            clean_lower,
+        )
+        if lock_match:
+            result = self.execute_tool_request(ToolExecutionRequest(name="system.lock_pc", arguments={}))
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", "Workstation locked, sir. Your desktop is now secure.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.lock_pc", target="workstation", status="success", message=msg, verified=True)]
+                )
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not lock workstation, sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.lock_pc", target="workstation", status="failed", message=f"Failed: {result.error}", verified=False)]
+            )
 
         return None
 

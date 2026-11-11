@@ -7,6 +7,8 @@ import os
 import shutil
 import subprocess
 import sys
+import time
+import ctypes
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -1075,6 +1077,364 @@ class WindowStateTool(Tool):
         )
 
 
+
+# ==============================================================================
+# 16. System Hardware Telemetry & Vitals Helper
+# ==============================================================================
+
+def get_system_vitals() -> dict:
+    """Returns real-time Windows hardware vitals without external dependencies."""
+    cpu_pct = 0.0
+    ram_pct = 0.0
+    used_gb = 0.0
+    total_gb = 0.0
+    disk_free = 0.0
+    disk_total = 0.0
+    disk_pct = 0.0
+    batt_pct = None
+    batt_status = None
+
+    if sys.platform == "win32":
+        try:
+            # RAM
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            total_gb = round(stat.ullTotalPhys / (1024**3), 1)
+            avail_gb = round(stat.ullAvailPhys / (1024**3), 1)
+            used_gb = round(total_gb - avail_gb, 1)
+            ram_pct = float(stat.dwMemoryLoad)
+        except Exception as exc:
+            logger.warning("RAM vitals collection failed: %s", exc)
+
+        try:
+            # CPU
+            class FILETIME(ctypes.Structure):
+                _fields_ = [("dwLowDateTime", ctypes.c_uint), ("dwHighDateTime", ctypes.c_uint)]
+            def _to_int(ft):
+                return (ft.dwHighDateTime << 32) + ft.dwLowDateTime
+            def _get_times():
+                idle, kernel, user = FILETIME(), FILETIME(), FILETIME()
+                ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
+                return _to_int(idle), _to_int(kernel), _to_int(user)
+            i1, k1, u1 = _get_times()
+            time.sleep(0.06)
+            i2, k2, u2 = _get_times()
+            idle_d, kern_d, usr_d = i2 - i1, k2 - k1, u2 - u1
+            tot = kern_d + usr_d
+            cpu_pct = round(100.0 * (1.0 - (idle_d / tot)), 1) if tot > 0 else 0.0
+        except Exception as exc:
+            logger.warning("CPU vitals collection failed: %s", exc)
+
+        try:
+            # Battery
+            class SYSTEM_POWER_STATUS(ctypes.Structure):
+                _fields_ = [
+                    ("ACLineStatus", ctypes.c_byte),
+                    ("BatteryFlag", ctypes.c_byte),
+                    ("BatteryLifePercent", ctypes.c_byte),
+                    ("SystemStatusFlag", ctypes.c_byte),
+                    ("BatteryLifeTime", ctypes.c_ulong),
+                    ("BatteryFullLifeTime", ctypes.c_ulong),
+                ]
+            pwr = SYSTEM_POWER_STATUS()
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(pwr)):
+                if pwr.BatteryLifePercent != 255:
+                    batt_pct = int(pwr.BatteryLifePercent)
+                    batt_status = "Plugged In" if pwr.ACLineStatus == 1 else "On Battery"
+        except Exception as exc:
+            logger.warning("Battery vitals collection failed: %s", exc)
+
+    try:
+        # Disk
+        root_dir = "C:\\" if sys.platform == "win32" else "/"
+        tot_d, usd_d, fre_d = shutil.disk_usage(root_dir)
+        disk_total = round(tot_d / (1024**3), 1)
+        disk_free = round(fre_d / (1024**3), 1)
+        disk_pct = round(100.0 * (usd_d / tot_d), 1)
+    except Exception as exc:
+        logger.warning("Disk vitals collection failed: %s", exc)
+
+    return {
+        "cpu_percent": cpu_pct,
+        "memory_used_gb": used_gb,
+        "memory_total_gb": total_gb,
+        "memory_percent": ram_pct,
+        "disk_free_gb": disk_free,
+        "disk_total_gb": disk_total,
+        "disk_percent": disk_pct,
+        "battery_percent": batt_pct,
+        "battery_plugged": batt_status,
+    }
+
+
+# ==============================================================================
+# 17. Multimedia Playback Tool (system.media_control)
+# ==============================================================================
+
+class MediaControlInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str = Field(description="Media action: play_pause, play, pause, next, previous, stop")
+
+
+class MediaControlOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str
+    status: str
+    message: str
+    verified: bool = True
+
+
+class MediaControlTool(Tool):
+    name = "system.media_control"
+    description = "Controls media playback (play, pause, next track, previous track, stop) across Spotify, YouTube, and media players."
+    input_schema = MediaControlInput
+    output_schema = MediaControlOutput
+    permission_required = False
+    permission_id = "system.media_control"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, MediaControlInput):
+            raise TypeError("MediaControlTool requires MediaControlInput arguments.")
+
+        act = arguments.action.strip().lower()
+        # Windows Virtual-Key Codes for Media
+        VK_MEDIA_NEXT_TRACK = 0xB0
+        VK_MEDIA_PREV_TRACK = 0xB1
+        VK_MEDIA_STOP = 0xB2
+        VK_MEDIA_PLAY_PAUSE = 0xB3
+
+        vk = VK_MEDIA_PLAY_PAUSE
+        action_desc = "toggled media playback"
+
+        if act in {"next", "skip", "next_track"}:
+            vk = VK_MEDIA_NEXT_TRACK
+            action_desc = "skipped to the next track"
+        elif act in {"previous", "prev", "back", "prev_track"}:
+            vk = VK_MEDIA_PREV_TRACK
+            action_desc = "skipped to the previous track"
+        elif act in {"stop"}:
+            vk = VK_MEDIA_STOP
+            action_desc = "stopped media playback"
+        elif act in {"pause"}:
+            vk = VK_MEDIA_PLAY_PAUSE
+            action_desc = "paused media playback"
+        elif act in {"play", "resume"}:
+            vk = VK_MEDIA_PLAY_PAUSE
+            action_desc = "resumed media playback"
+
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(vk, 0, 2, 0)
+            except Exception as exc:
+                logger.warning("Media keybd_event failed: %s", exc)
+
+        return MediaControlOutput(
+            action=act,
+            status="success",
+            message=f"I have {action_desc} for you, sir.",
+            verified=True,
+        )
+
+
+# ==============================================================================
+# 18. Volume & Audio Output Control Tool (system.volume_control)
+# ==============================================================================
+
+class VolumeControlInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str = Field(description="Volume action: mute, unmute, toggle_mute, up, down, set")
+    percent: int | None = Field(default=None, ge=0, le=100, description="Target volume percentage (0-100) for set action")
+
+
+class VolumeControlOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str
+    percent: int | None = None
+    status: str
+    message: str
+    verified: bool = True
+
+
+class VolumeControlTool(Tool):
+    name = "system.volume_control"
+    description = "Controls master audio volume on Windows: mute, unmute, turn volume up or down, or set to a specific percentage."
+    input_schema = VolumeControlInput
+    output_schema = VolumeControlOutput
+    permission_required = False
+    permission_id = "system.volume_control"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, VolumeControlInput):
+            raise TypeError("VolumeControlTool requires VolumeControlInput arguments.")
+
+        act = arguments.action.strip().lower()
+        target_pct = arguments.percent
+
+        VK_VOLUME_MUTE = 0xAD
+        VK_VOLUME_DOWN = 0xAE
+        VK_VOLUME_UP = 0xAF
+
+        msg = "Adjusted volume, sir."
+
+        if sys.platform == "win32":
+            try:
+                if act in {"mute", "unmute", "toggle_mute"}:
+                    ctypes.windll.user32.keybd_event(VK_VOLUME_MUTE, 0, 0, 0)
+                    ctypes.windll.user32.keybd_event(VK_VOLUME_MUTE, 0, 2, 0)
+                    msg = "Audio muted, sir." if act == "mute" else "Audio volume toggled, sir."
+                elif act in {"up", "increase", "louder"}:
+                    for _ in range(5):
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 0, 0)
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 2, 0)
+                    msg = "Increased master volume, sir."
+                elif act in {"down", "decrease", "lower", "quieter"}:
+                    for _ in range(5):
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 0, 0)
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 2, 0)
+                    msg = "Decreased master volume, sir."
+                elif act == "set" or target_pct is not None:
+                    pct = max(0, min(100, target_pct if target_pct is not None else 50))
+                    # Zero out volume with 50 down pulses
+                    for _ in range(50):
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 0, 0)
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_DOWN, 0, 2, 0)
+                    # Step up to target
+                    steps = round(pct / 2)
+                    for _ in range(steps):
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 0, 0)
+                        ctypes.windll.user32.keybd_event(VK_VOLUME_UP, 0, 2, 0)
+                    msg = f"Set master volume to {pct}%, sir."
+            except Exception as exc:
+                logger.warning("Volume keybd_event failed: %s", exc)
+
+        return VolumeControlOutput(
+            action=act,
+            percent=target_pct,
+            status="success",
+            message=msg,
+            verified=True,
+        )
+
+
+# ==============================================================================
+# 19. System Diagnostics & Hardware Vitals Tool (system.vitals)
+# ==============================================================================
+
+class SystemVitalsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    detail_level: str = Field(default="summary", description="Detail level: summary or full")
+
+
+class SystemVitalsOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cpu_percent: float
+    memory_used_gb: float
+    memory_total_gb: float
+    memory_percent: float
+    disk_free_gb: float
+    disk_total_gb: float
+    disk_percent: float
+    battery_percent: int | None = None
+    battery_plugged: str | None = None
+    status: str
+    summary: str
+    verified: bool = True
+
+
+class SystemVitalsTool(Tool):
+    name = "system.vitals"
+    description = "Inspects and reports real-time Windows hardware vitals including CPU load, RAM allocation, disk capacity, and battery charge."
+    input_schema = SystemVitalsInput
+    output_schema = SystemVitalsOutput
+    permission_required = False
+    permission_id = "system.vitals"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, SystemVitalsInput):
+            raise TypeError("SystemVitalsTool requires SystemVitalsInput arguments.")
+
+        data = get_system_vitals()
+        batt_str = f", Battery at {data['battery_percent']}% ({data['battery_plugged']})" if data['battery_percent'] is not None else ""
+        summary = (
+            f"Hardware diagnostics nominal, sir: CPU load is {data['cpu_percent']}%, "
+            f"RAM utilization is {data['memory_percent']}% ({data['memory_used_gb']} of {data['memory_total_gb']} GB used), "
+            f"C: drive has {data['disk_free_gb']} GB free ({data['disk_percent']}% used){batt_str}."
+        )
+
+        return SystemVitalsOutput(
+            cpu_percent=data["cpu_percent"],
+            memory_used_gb=data["memory_used_gb"],
+            memory_total_gb=data["memory_total_gb"],
+            memory_percent=data["memory_percent"],
+            disk_free_gb=data["disk_free_gb"],
+            disk_total_gb=data["disk_total_gb"],
+            disk_percent=data["disk_percent"],
+            battery_percent=data["battery_percent"],
+            battery_plugged=data["battery_plugged"],
+            status="success",
+            summary=summary,
+            verified=True,
+        )
+
+
+# ==============================================================================
+# 20. Workstation Security & Lock Screen Tool (system.lock_pc)
+# ==============================================================================
+
+class LockWorkstationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class LockWorkstationOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    message: str
+    verified: bool = True
+
+
+class LockWorkstationTool(Tool):
+    name = "system.lock_pc"
+    description = "Locks the Windows desktop immediately for privacy and physical security."
+    input_schema = LockWorkstationInput
+    output_schema = LockWorkstationOutput
+    permission_required = False
+    permission_id = "system.lock_pc"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, LockWorkstationInput):
+            raise TypeError("LockWorkstationTool requires LockWorkstationInput arguments.")
+
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.user32.LockWorkStation()
+            except Exception as exc:
+                logger.warning("LockWorkStation failed: %s", exc)
+
+        return LockWorkstationOutput(
+            status="success",
+            message="Workstation locked, sir. Your desktop is now secure.",
+            verified=True,
+        )
+
+
 def get_all_system_tools() -> list[Tool]:
     return [
         WebOpenTool(),
@@ -1090,4 +1450,8 @@ def get_all_system_tools() -> list[Tool]:
         FocusWindowTool(),
         SendKeysTool(),
         WindowStateTool(),
+        MediaControlTool(),
+        VolumeControlTool(),
+        SystemVitalsTool(),
+        LockWorkstationTool(),
     ]

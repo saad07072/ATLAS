@@ -4,7 +4,8 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
-import { sendChatMessage, type ActionRecord } from "@/services/api";
+import { sendChatMessage, getSystemVitals, type ActionRecord } from "@/services/api";
+import type { SystemVitals } from "@/types";
 import { audioFx } from "@/services/audio-fx";
 
 export type AtlasState = "standby" | "listening" | "processing" | "speaking";
@@ -67,6 +68,27 @@ export function AtlasCore({
     audioLevel: 0,
     activeVoice: "Detecting neural voice...",
   });
+  const [vitals, setVitals] = useState<SystemVitals | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchVitals = async () => {
+      try {
+        const data = await getSystemVitals();
+        if (isMounted) {
+          setVitals(data);
+        }
+      } catch {
+        // Fallback silently if server temporarily offline
+      }
+    };
+    fetchVitals();
+    const interval = setInterval(fetchVitals, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
   const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
@@ -974,6 +996,28 @@ export function AtlasCore({
           <span>SYSTEM DIAGNOSTICS</span>
           <span className="hud-dot green" />
         </div>
+        {vitals && (
+          <>
+            <div className="hud-telemetry-row right-aligned">
+              <span>CPU LOAD:</span>
+              <span className="hud-val">{vitals.cpu_percent}%</span>
+            </div>
+            <div className="hud-telemetry-row right-aligned">
+              <span>RAM USAGE:</span>
+              <span className="hud-val">{vitals.memory_used_gb}/{vitals.memory_total_gb} GB ({vitals.memory_percent}%)</span>
+            </div>
+            {vitals.battery_percent !== null && (
+              <div className="hud-telemetry-row right-aligned">
+                <span>BATTERY:</span>
+                <span className="hud-val">{vitals.battery_percent}% [{vitals.battery_plugged}]</span>
+              </div>
+            )}
+            <div className="hud-telemetry-row right-aligned">
+              <span>DISK FREE:</span>
+              <span className="hud-val">{vitals.disk_free_gb} GB ({vitals.disk_percent}%)</span>
+            </div>
+          </>
+        )}
         <div className="hud-telemetry-row right-aligned">
           <span>FREQUENCY:</span>
           <span className="hud-val">{telemetry.frequency} HZ</span>
