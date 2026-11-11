@@ -2189,6 +2189,42 @@ img {
   color: #00f0ff;
 }
 
+.hud-console-trigger.wakeword-active {
+  background: rgba(14, 165, 233, 0.22) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.45) !important;
+}
+
+.hud-console-trigger.wakeword-muted {
+  background: rgba(100, 116, 139, 0.15) !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+  color: #94a3b8 !important;
+}
+
+.wakeword-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(14, 165, 233, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  color: #38bdf8;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.25);
+  animation: pulseWakeWord 1.2s infinite ease-in-out;
+  margin-bottom: 0.6rem;
+  align-self: center;
+}
+
+@keyframes pulseWakeWord {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
 .atlas-command-bar {
   display: flex;
   align-items: center;
