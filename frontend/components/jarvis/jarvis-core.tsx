@@ -724,6 +724,9 @@ export function AtlasCore({
         e.preventDefault();
         void audioFx.playUiTap();
         setIsMiniMode((prev) => !prev);
+      } else if ((e.code === "KeyS" && e.shiftKey && (e.ctrlKey || e.metaKey)) || (e.code === "KeyS" && e.altKey)) {
+        e.preventDefault();
+        toggleScreenShare();
       } else if (e.code === "Escape") {
         if (atlasStateRef.current === "processing") {
           abortCurrentTask();
@@ -737,7 +740,7 @@ export function AtlasCore({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activateAtlas, abortCurrentTask, isActive, sendToAtlas, startRecognitionSafe]);
+  }, [activateAtlas, abortCurrentTask, isActive, sendToAtlas, startRecognitionSafe, toggleScreenShare]);
 
   // -------------------------------------------------------------
   // 6. Holographic Arc Reactor & Gyroscope Core Animation (60fps)
@@ -1271,6 +1274,47 @@ export function AtlasCore({
           </div>
           <p className="dialogue-text">{atlasResponse}</p>
         </div>
+
+        {/* Holographic Optical Vision Quick Bar */}
+        {isScreenShared && (
+          <div className="atlas-vision-quick-bar" onClick={(e) => e.stopPropagation()}>
+            <span className="vision-stream-tag">
+              <span className="vision-dot pulsing" /> OPTICAL FEED LINKED
+            </span>
+            <button
+              type="button"
+              className="vision-quick-btn"
+              onClick={() => void sendToAtlas("Inspect my screen and describe what is visible")}
+              title="Full screen inspection"
+            >
+              🔍 Inspect Screen
+            </button>
+            <button
+              type="button"
+              className="vision-quick-btn"
+              onClick={() => void sendToAtlas("What error or bug is visible on my screen?")}
+              title="Debug error on screen"
+            >
+              🐛 Debug Error
+            </button>
+            <button
+              type="button"
+              className="vision-quick-btn"
+              onClick={() => void sendToAtlas("Extract and transcribe all text from my screen")}
+              title="Extract text via OCR"
+            >
+              ⚡ Extract Text (OCR)
+            </button>
+            <button
+              type="button"
+              className="vision-quick-btn"
+              onClick={() => void sendToAtlas("Summarize the document or page on my screen")}
+              title="Summarize document or page"
+            >
+              📄 Summarize Page
+            </button>
+          </div>
+        )}
 
         {/* Sleek Liquid-Glass Quick Command Bar */}
         <form

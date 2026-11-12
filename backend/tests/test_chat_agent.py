@@ -343,6 +343,32 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].tool, "screen.inspect")
         self.assertEqual(response.actions[0].status, "success")
 
+    def test_screen_vision_error_debugging_when_image_present(self) -> None:
+        self.provider.generate.return_value = Mock(content="The build failed due to a missing semicolon on line 42, sir.")
+        agent = ChatAgent(self.provider)
+        response = agent.respond(ChatRequest(message="what error is on my screen?", image_data="data:image/jpeg;base64,abc123fake"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("semicolon", response.message)
+        self.assertEqual(response.actions[0].tool, "screen.inspect")
+        self.assertIn("error", response.actions[0].message.lower())
+
+    def test_screen_vision_ocr_when_image_present(self) -> None:
+        self.provider.generate.return_value = Mock(content="The extracted text reads: Total Due: $150.00, sir.")
+        agent = ChatAgent(self.provider)
+        response = agent.respond(ChatRequest(message="extract the text from my screen", image_data="data:image/jpeg;base64,abc123fake"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Total Due", response.message)
+        self.assertEqual(response.actions[0].tool, "screen.inspect")
+        self.assertIn("ocr", response.actions[0].message.lower())
+
+    def test_screen_vision_requests_screen_when_error_asked_without_image(self) -> None:
+        agent = ChatAgent(self.provider)
+        response = agent.respond(ChatRequest(message="what error is on my screen?"))
+        self.assertEqual(response.intent, "conversation")
+        self.assertIn("SHARE SCREEN", response.message)
+        self.assertEqual(response.actions[0].tool, "screen.inspect")
+        self.assertEqual(response.actions[0].status, "requested")
+
 
     def test_calendar_list_events_dispatched(self) -> None:
         from backend.app.tools.models import ToolResult, ToolExecutionMetadata

@@ -291,19 +291,87 @@ class ChatAgent:
 
         clean_lower = message.lower().strip("?.! ")
 
-        # 0a. Screen Vision Inspection Inquiry
-        if re.search(
-            r"\b(?:can\s+you\s+(?:able\s+to\s+)?see\s+my\s+screen|see\s+(?:what(?:'s|\s+is)\s+on\s+)?my\s+screen|look\s+at\s+my\s+screen|what(?:'s|\s+is)\s+on\s+my\s+screen|inspect\s+my\s+screen|read\s+my\s+screen|check\s+my\s+screen|what\s+am\s+i\s+looking\s+at|help\s+me\s+with\s+(?:what(?:'s|\s+is)\s+on\s+)?my\s+screen)\b",
-            clean_lower,
-        ):
+        # 0a. Intelligent Screen Vision Observer & Live Context Sensing
+        is_direct_screen_query = bool(
+            re.search(
+                r"\b(?:can\s+you\s+(?:able\s+to\s+)?see\s+my\s+screen|see\s+(?:what(?:'s|\s+is)\s+on\s+)?my\s+screen|look\s+at\s+my\s+screen|what(?:'s|\s+is)\s+on\s+my\s+screen|inspect\s+my\s+screen|read\s+my\s+screen|check\s+my\s+screen|what\s+am\s+i\s+looking\s+at|describe\s+my\s+screen|help\s+me\s+with\s+(?:what(?:'s|\s+is)\s+on\s+)?my\s+screen)\b",
+                clean_lower,
+            )
+        )
+        is_error_query = bool(
+            re.search(
+                r"\b(?:what\s+error|debug\s+(?:this\s+)?(?:error|code|issue|screen)|explain\s+(?:this\s+)?error|why\s+(?:is\s+this\s+failing|did\s+this\s+fail)|fix\s+(?:this\s+)?error|compiler\s+error|stack\s*trace|find\s+(?:the\s+)?(?:bug|error))\b",
+                clean_lower,
+            )
+        )
+        is_code_query = bool(
+            re.search(
+                r"\b(?:explain\s+(?:this\s+|the\s+)?code|review\s+(?:this\s+|the\s+)?code|what\s+does\s+this\s+(?:code|function|class|method)\s+do|inspect\s+(?:this\s+|the\s+)?code)\b",
+                clean_lower,
+            )
+        )
+        is_ocr_query = bool(
+            re.search(
+                r"\b(?:read\s+(?:the\s+)?(?:text|words|content)|extract\s+(?:the\s+)?text|ocr\s+(?:my\s+)?screen|transcribe\s+(?:my\s+screen|this)|what\s+does\s+(?:it|this)\s+say)\b",
+                clean_lower,
+            )
+        )
+        is_summary_query = bool(
+            re.search(
+                r"\b(?:summarize\s+(?:what(?:'s|\s+is)\s+on\s+my\s+screen|this\s+(?:page|document|pdf|article|screen))|give\s+me\s+(?:a\s+)?summary\s+of\s+(?:my\s+screen|this))\b",
+                clean_lower,
+            )
+        )
+
+        should_trigger_vision = (
+            is_direct_screen_query
+            or (image_data and (is_error_query or is_code_query or is_ocr_query or is_summary_query or "on my screen" in clean_lower or "on screen" in clean_lower))
+            or (not image_data and ("on my screen" in clean_lower or "on screen" in clean_lower or (is_direct_screen_query or ((is_error_query or is_code_query or is_ocr_query or is_summary_query) and "screen" in clean_lower))))
+        )
+
+        if should_trigger_vision:
             if image_data:
+                if is_error_query:
+                    task_directive = (
+                        f"The user asks: '{message}'.\n"
+                        "Carefully examine the active screen: locate and read any visible compiler errors, exceptions, stack traces, warning banners, or broken UI elements. "
+                        "Explain the root cause clearly, indicate the exact file/line if visible, and provide the concrete, step-by-step fix."
+                    )
+                    action_msg = "Diagnosed screen error and failure root cause via Gemini Vision core"
+                elif is_code_query:
+                    task_directive = (
+                        f"The user asks: '{message}'.\n"
+                        "Review the code and programming environment visible on the active screen. "
+                        "Explain the logic, architecture, functions, or potential edge cases, and directly answer the user's technical question."
+                    )
+                    action_msg = "Inspected and reviewed on-screen code via Gemini Vision core"
+                elif is_ocr_query:
+                    task_directive = (
+                        f"The user asks: '{message}'.\n"
+                        "Extract and transcribe all readable text, data, labels, code snippets, or document contents visible on the active screen display. "
+                        "Present the extracted text clearly and organized."
+                    )
+                    action_msg = "Extracted and transcribed on-screen text (OCR) via Gemini Vision core"
+                elif is_summary_query:
+                    task_directive = (
+                        f"The user asks: '{message}'.\n"
+                        "Provide a crisp, structured executive summary of the document, article, webpage, dashboard, or presentation currently open on the screen."
+                    )
+                    action_msg = "Summarized active screen document and visual content via Gemini Vision core"
+                else:
+                    task_directive = (
+                        f"The user asks: '{message}'.\n"
+                        "Describe what is currently visible on the active display: the active application, open windows, text, code, errors, or documents, and provide concrete assistance."
+                    )
+                    action_msg = "Analyzed active screen display via Gemini Vision core"
+
                 vision_req = LLMRequest(
                     messages=[
                         LLMMessage(
                             role="user",
                             content=(
-                                "You are ATLAS inspecting the user's active screen via multimodal vision stream. "
-                                "Describe what is currently visible on the screen: active application, open windows, text, code, errors, or documents. "
+                                "You are ATLAS, an elite AI assistant inspecting the user's active screen via real-time multimodal optical neural vision.\n\n"
+                                f"{task_directive}\n\n"
                                 "Provide a polite, crisp, and direct British assistant assessment, and offer immediate concrete assistance."
                             ),
                             image_data=image_data,
@@ -326,7 +394,7 @@ class ChatAgent:
                             tool="screen.inspect",
                             target="active_display",
                             status="success",
-                            message="Analyzed active screen display via Gemini Vision core",
+                            message=action_msg,
                             verified=True,
                         )
                     ],
@@ -335,8 +403,8 @@ class ChatAgent:
                 return ChatResponse(
                     intent="conversation",
                     message=(
-                        "I can inspect and assist with your active screen at any moment, sir! "
-                        "Please click the **[ 👁️ SHARE SCREEN ]** button on your HUD (top right or below) to establish a live display link with my vision core. "
+                        "I require a visual link to inspect your display, sir! "
+                        "Please click the **[ 👁️ SHARE SCREEN ]** button on your HUD (or press Ctrl+Shift+S) to establish a live display link with my vision core. "
                         "Once linked, I can analyze your code, debug desktop errors, inspect open documents, and assist with any desktop task with full visual context."
                     ),
                     actions=[
