@@ -457,6 +457,18 @@ class ToolFrameworkTests(unittest.TestCase):
             self.assertTrue(res.verified)
             self.assertIn("developer setup", res.message.lower())
 
+    def test_screen_inspect_tool_execution(self) -> None:
+        from backend.app.tools.system_tools import ScreenInspectTool, ScreenInspectInput
+        tool = ScreenInspectTool()
+        res_no_img = tool.execute(ScreenInspectInput(query="describe"))
+        self.assertEqual(res_no_img.status, "requested")
+        self.assertFalse(res_no_img.verified)
+
+        res_with_img = tool.execute(ScreenInspectInput(query="debug_error", image_data="data:image/jpeg;base64,mock"))
+        self.assertEqual(res_with_img.status, "success")
+        self.assertTrue(res_with_img.verified)
+        self.assertIn("debug_error", res_with_img.message)
+
 
 if __name__ == "__main__":
     unittest.main()

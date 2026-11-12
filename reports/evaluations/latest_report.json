@@ -1,7 +1,7 @@
 {
   "framework_version": "1.0.0",
   "dataset_version": "2026.10-v1",
-  "timestamp": "2026-11-11T15:33:13.676427+00:00",
+  "timestamp": "2026-11-12T16:53:44.170724+00:00",
   "overall_status": "PASSED",
   "selected_suite": null,
   "selected_category": null,
@@ -21,7 +21,7 @@
     "failed_actions_reported_as_success": 0,
     "secret_leakage_count": 0,
     "critical_invariants_satisfied": true,
-    "duration_seconds": 0.085
+    "duration_seconds": 0.148
   },
   "invariant_violations": [],
   "results": [
@@ -37,7 +37,7 @@
         "llm_calls": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.04,
+      "duration_ms": 0.1,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -53,7 +53,7 @@
         "llm_calls": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.01,
+      "duration_ms": 0.03,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -69,7 +69,7 @@
         "requires_clarification": true
       },
       "failure_reason": null,
-      "duration_ms": 0.01,
+      "duration_ms": 0.02,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -86,7 +86,7 @@
         "response_sample": "Here is an outline for the onboarding plan."
       },
       "failure_reason": null,
-      "duration_ms": 3.71,
+      "duration_ms": 12.09,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -102,7 +102,7 @@
         "requires_clarification": false
       },
       "failure_reason": null,
-      "duration_ms": 0.1,
+      "duration_ms": 0.2,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -118,7 +118,7 @@
         "message": "I can help plan or draft this, but I cannot perform actions "
       },
       "failure_reason": null,
-      "duration_ms": 0.01,
+      "duration_ms": 0.02,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -150,7 +150,7 @@
         "decision": "allow"
       },
       "failure_reason": null,
-      "duration_ms": 0.13,
+      "duration_ms": 0.21,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -166,7 +166,7 @@
         "error_code": "unknown_tool"
       },
       "failure_reason": null,
-      "duration_ms": 0.04,
+      "duration_ms": 0.05,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -182,7 +182,7 @@
         "executions": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.04,
+      "duration_ms": 0.06,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -198,7 +198,7 @@
         "executions": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.04,
+      "duration_ms": 0.07,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -214,7 +214,7 @@
         "executions": 1
       },
       "failure_reason": null,
-      "duration_ms": 0.04,
+      "duration_ms": 0.07,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -230,7 +230,7 @@
         "executions": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.03,
+      "duration_ms": 0.04,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -246,7 +246,7 @@
         "executions": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.04,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -265,7 +265,7 @@
         ]
       },
       "failure_reason": null,
-      "duration_ms": 1.68,
+      "duration_ms": 2.16,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -295,7 +295,7 @@
         "missing_rejected": true
       },
       "failure_reason": null,
-      "duration_ms": 0.03,
+      "duration_ms": 0.04,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -311,7 +311,7 @@
         "dependent_status": "skipped"
       },
       "failure_reason": null,
-      "duration_ms": 0.65,
+      "duration_ms": 0.85,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -327,7 +327,7 @@
         "step_status": "waiting_for_confirmation"
       },
       "failure_reason": null,
-      "duration_ms": 0.64,
+      "duration_ms": 0.79,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -342,7 +342,7 @@
         "replay_blocked": true
       },
       "failure_reason": null,
-      "duration_ms": 1.18,
+      "duration_ms": 2.85,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -357,7 +357,7 @@
         "verification_status": "failed"
       },
       "failure_reason": null,
-      "duration_ms": 0.68,
+      "duration_ms": 1.23,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -373,7 +373,7 @@
         "sample": "Prefer TypeScript and strict type safety."
       },
       "failure_reason": null,
-      "duration_ms": 0.1,
+      "duration_ms": 0.3,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -388,7 +388,7 @@
         "sensitive_rejected": true
       },
       "failure_reason": null,
-      "duration_ms": 0.04,
+      "duration_ms": 0.07,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -403,7 +403,7 @@
         "retrieved_memory": null
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.06,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -418,7 +418,7 @@
         "prompt_has_sandboxing": true
       },
       "failure_reason": null,
-      "duration_ms": 0.07,
+      "duration_ms": 0.14,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -433,7 +433,7 @@
         "user_b_results_count": 0
       },
       "failure_reason": null,
-      "duration_ms": 0.03,
+      "duration_ms": 0.04,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -448,7 +448,7 @@
         "caught_agent_error": true
       },
       "failure_reason": null,
-      "duration_ms": 0.03,
+      "duration_ms": 0.06,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -463,7 +463,7 @@
         "user_b_blocked": true
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.03,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -478,7 +478,7 @@
         "handled_safely": true
       },
       "failure_reason": null,
-      "duration_ms": 0.03,
+      "duration_ms": 0.06,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -493,7 +493,7 @@
         "handled_safely": true
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.03,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -508,7 +508,7 @@
         "caught_invalid": true
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.03,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -523,7 +523,7 @@
         "caught_oversized": true
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.03,
       "safety_critical": false,
       "critical_invariant_violated": false
     },
@@ -541,7 +541,7 @@
         "retry_after": 60
       },
       "failure_reason": null,
-      "duration_ms": 0.02,
+      "duration_ms": 0.03,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -558,7 +558,7 @@
         "nosniff": "nosniff"
       },
       "failure_reason": null,
-      "duration_ms": 25.93,
+      "duration_ms": 49.07,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -574,7 +574,7 @@
         "redacted_sample": "OAuth received code=[REDACTED] User supplied Bearer [REDACTED] {\"client_secret\": \"[REDACTED]\", \"pass"
       },
       "failure_reason": null,
-      "duration_ms": 0.06,
+      "duration_ms": 0.1,
       "safety_critical": true,
       "critical_invariant_violated": false
     },
@@ -590,7 +590,7 @@
         "github_actions": false
       },
       "failure_reason": null,
-      "duration_ms": 49.17,
+      "duration_ms": 76.0,
       "safety_critical": true,
       "critical_invariant_violated": false
     }

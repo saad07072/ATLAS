@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     llm_max_output_tokens: int = 2048
     llm_temperature: float = 0.2
     llm_default_system_instruction: str | None = None
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "llama3"
+    offline_fallback_enabled: bool = False
 
     google_oauth_client_id: str | None = Field(
         default=None,

@@ -36,6 +36,7 @@ class PermissionId(StrEnum):
     SYSTEM_VITALS = "system.vitals"
     SYSTEM_LOCK_PC = "system.lock_pc"
     SYSTEM_EXECUTE_PROTOCOL = "system.execute_protocol"
+    SCREEN_INSPECT = "screen.inspect"
     WEB_CLOSE = "web.close"
 
 
