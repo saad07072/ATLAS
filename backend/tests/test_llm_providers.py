@@ -6,9 +6,11 @@ from unittest.mock import Mock, patch
 
 from google.genai.errors import APIError
 
-from backend.app.agent.providers.errors import RetryExhaustedError
+from backend.app.agent.providers.errors import RetryExhaustedError, ProviderTimeoutError
 from backend.app.agent.providers.factory import get_llm_provider
 from backend.app.agent.providers.gemini import GeminiProvider
+from backend.app.agent.providers.local_offline import LocalOfflineProvider
+from backend.app.agent.providers.resilient import ResilientLLMProvider
 from backend.app.agent.providers.models import (
     LLMMessage,
     LLMRequest,
@@ -142,6 +144,41 @@ class LLMProviderTests(unittest.TestCase):
                     messages=[LLMMessage(role="user", content="trigger retry")],
                 )
             )
+
+    def test_factory_returns_local_provider(self) -> None:
+        fake_settings = Settings(_env_file=None, llm_provider="local")
+        with patch("backend.app.agent.providers.factory.settings", fake_settings):
+            provider = get_llm_provider()
+        self.assertIsInstance(provider, LocalOfflineProvider)
+
+    def test_factory_returns_resilient_provider_when_enabled(self) -> None:
+        fake_settings = Settings(
+            _env_file=None,
+            llm_provider="gemini",
+            gemini_api_key="test-key",
+            offline_fallback_enabled=True,
+        )
+        with patch("backend.app.agent.providers.factory.settings", fake_settings):
+            provider = get_llm_provider()
+        self.assertIsInstance(provider, ResilientLLMProvider)
+
+    def test_local_offline_provider_generate_heuristic(self) -> None:
+        provider = LocalOfflineProvider()
+        response = provider.generate(
+            LLMRequest(messages=[LLMMessage(role="user", content="hello jarvis")])
+        )
+        self.assertIn("Local Offline", response.content)
+        self.assertEqual(response.finish_reason, "stop")
+
+    def test_resilient_provider_falls_back_on_primary_failure(self) -> None:
+        mock_primary = Mock()
+        mock_primary.generate.side_effect = ProviderTimeoutError("Cloud connection timed out")
+        fallback = LocalOfflineProvider()
+        resilient = ResilientLLMProvider(primary=mock_primary, fallback=fallback, fallback_enabled=True)
+        response = resilient.generate(
+            LLMRequest(messages=[LLMMessage(role="user", content="what can you do")])
+        )
+        self.assertIn("Local Offline", response.content)
 
 
 if __name__ == "__main__":

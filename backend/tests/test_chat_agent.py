@@ -650,6 +650,14 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].tool, "system.window_state")
         self.assertEqual(response.actions[1].tool, "system.open_app")
 
+    def test_chat_agent_handles_offline_status_inquiry(self) -> None:
+        agent = ChatAgent(self.provider)
+        response = agent.respond(ChatRequest(message="are you offline?"))
+        self.assertEqual(response.intent, "task_request")
+        self.assertIn("Local Offline", response.message)
+        self.assertEqual(response.actions[0].tool, "system.vitals")
+        self.assertEqual(response.actions[0].status, "success")
+
 
 
 if __name__ == "__main__":

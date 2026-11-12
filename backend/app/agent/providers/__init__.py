@@ -11,6 +11,8 @@ from backend.app.agent.providers.errors import (
 )
 from backend.app.agent.providers.factory import get_llm_provider
 from backend.app.agent.providers.gemini import GeminiProvider
+from backend.app.agent.providers.local_offline import LocalOfflineProvider
+from backend.app.agent.providers.resilient import ResilientLLMProvider
 from backend.app.agent.providers.models import (
     LLMHealthStatus,
     LLMMessage,

@@ -91,6 +91,7 @@ export function AtlasCore({
   }, []);
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
   const [isMiniMode, setIsMiniMode] = useState<boolean>(initialMini);
   const isMiniModeRef = useRef<boolean>(initialMini);
@@ -136,6 +137,26 @@ export function AtlasCore({
   useEffect(() => {
     atlasStateRef.current = atlasState;
   }, [atlasState]);
+
+  // Real-time network connectivity sensing (Local Offline Fallback)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => {
+      setIsOnline(true);
+      void audioFx.playSuccess();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      void audioFx.playAlert();
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     isActiveRef.current = isActive;
@@ -1063,7 +1084,13 @@ export function AtlasCore({
         </div>
         <div className="hud-telemetry-row">
           <span>CORE:</span>
-          <span className="hud-val">GEMINI FLASH LATEST</span>
+          <span className="hud-val">{isOnline ? "GEMINI FLASH LATEST" : "LOCAL OFFLINE CORE"}</span>
+        </div>
+        <div className="hud-telemetry-row">
+          <span>LINK:</span>
+          <span className={`hud-val ${!isOnline ? "state-speaking" : ""}`}>
+            {isOnline ? "CLOUD CONNECTED" : "LOCAL AUTONOMOUS"}
+          </span>
         </div>
         <div className="hud-telemetry-row">
           <span>STATE:</span>

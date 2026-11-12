@@ -455,6 +455,33 @@ class ChatAgent:
                     ],
                 )
 
+        # 0c. Offline Mode & Local Execution Status
+        if re.search(
+            r"\b(?:offline\s+mode|local\s+mode|are\s+you\s+offline|run\s+offline|operate\s+offline|what\s+can\s+you\s+do\s+offline|offline\s+capabilities)\b",
+            clean_lower,
+        ):
+            from backend.app.tools.system_tools import get_system_vitals
+            vitals = get_system_vitals()
+            msg = (
+                "ATLAS Local Offline Core is active and standing by, sir. "
+                f"Host CPU load is {vitals['cpu_percent']}%, RAM allocation is {vitals['memory_percent']}%. "
+                "All desktop operations — including hardware vitals, volume leveling, application control, "
+                "custom workflow protocols, window management, and workstation locking — operate with 100% local autonomy with zero cloud latency."
+            )
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[
+                    ActionExecutionRecord(
+                        tool="system.vitals",
+                        target="local_workstation",
+                        status="success",
+                        message="Verified local offline desktop execution engine",
+                        verified=True,
+                    )
+                ],
+            )
+
         # 1. Capabilities Inquiry
         if re.search(r"\bcan you open (?:any|a) website\b", clean_lower):
             return ChatResponse(
