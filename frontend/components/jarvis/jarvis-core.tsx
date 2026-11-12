@@ -91,7 +91,10 @@ export function AtlasCore({
   }, []);
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    if (typeof navigator === "undefined") return true;
+    return navigator.onLine;
+  });
   const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
   const [isMiniMode, setIsMiniMode] = useState<boolean>(initialMini);
   const isMiniModeRef = useRef<boolean>(initialMini);
@@ -141,7 +144,6 @@ export function AtlasCore({
   // Real-time network connectivity sensing (Local Offline Fallback)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setIsOnline(navigator.onLine);
     const handleOnline = () => {
       setIsOnline(true);
       void audioFx.playSuccess();
