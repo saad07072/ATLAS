@@ -449,3 +449,87 @@ export async function deleteSystemMacro(
     },
   );
 }
+
+export interface BrowserCDPStatus {
+  connected: boolean;
+  endpoint?: string | null;
+  browser: string;
+  protocol_version?: string | null;
+  user_agent?: string | null;
+  error?: string | null;
+}
+
+export interface BrowserCDPTab {
+  id: string;
+  title: string;
+  url: string;
+  type: string;
+  web_socket_debugger_url?: string | null;
+  frontend_url?: string | null;
+}
+
+export interface BrowserCDPTabsResponse {
+  connected: boolean;
+  tab_count: number;
+  tabs: BrowserCDPTab[];
+}
+
+export async function getBrowserCDPStatus(): Promise<BrowserCDPStatus> {
+  return request<BrowserCDPStatus>("/api/v1/system/browser/cdp/status");
+}
+
+export async function getBrowserCDPTabs(): Promise<BrowserCDPTabsResponse> {
+  return request<BrowserCDPTabsResponse>("/api/v1/system/browser/cdp/tabs");
+}
+
+export async function openBrowserCDPTab(
+  url: string,
+): Promise<{ success: boolean; id?: string; message: string }> {
+  return request<{ success: boolean; id?: string; message: string }>(
+    "/api/v1/system/browser/cdp/tabs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    },
+  );
+}
+
+export async function activateBrowserCDPTab(
+  tabId: string,
+): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>(
+    `/api/v1/system/browser/cdp/tabs/${encodeURIComponent(tabId)}/activate`,
+    { method: "POST" },
+  );
+}
+
+export async function closeBrowserCDPTab(
+  tabId: string,
+): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>(
+    `/api/v1/system/browser/cdp/tabs/${encodeURIComponent(tabId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function reloadBrowserCDPTab(
+  tabId?: string,
+): Promise<{ status: string; message: string }> {
+  const targetId = tabId || "active";
+  return request<{ status: string; message: string }>(
+    `/api/v1/system/browser/cdp/tabs/${encodeURIComponent(targetId)}/reload`,
+    { method: "POST" },
+  );
+}
+
+export async function launchDebugBrowser(
+  url?: string,
+  port = 9222,
+): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>("/api/v1/system/browser/cdp/launch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, port }),
+  });
+}

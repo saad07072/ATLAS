@@ -42,6 +42,13 @@ class PermissionId(StrEnum):
     SYSTEM_MACRO_DELETE = "system.macro_delete"
     SCREEN_INSPECT = "screen.inspect"
     WEB_CLOSE = "web.close"
+    BROWSER_CDP_LIST = "browser.cdp_list_tabs"
+    BROWSER_CDP_OPEN = "browser.cdp_open_tab"
+    BROWSER_CDP_CLOSE = "browser.cdp_close_tab"
+    BROWSER_CDP_ACTIVATE = "browser.cdp_activate_tab"
+    BROWSER_CDP_RELOAD = "browser.cdp_reload_tab"
+    BROWSER_CDP_EVAL = "browser.cdp_eval"
+    BROWSER_CDP_LAUNCH = "browser.cdp_launch"
 
 
 class RiskLevel(StrEnum):

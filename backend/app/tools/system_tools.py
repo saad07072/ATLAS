@@ -602,6 +602,21 @@ class AppCloseTool(Tool):
             "facebook", "instagram", "twitch", "github", "wikipedia", "spotify"
         }
 
+        if is_tab_or_site:
+            try:
+                from backend.app.tools.browser_cdp import browser_cdp_manager
+                if browser_cdp_manager.is_connected():
+                    cdp_success, cdp_msg = browser_cdp_manager.close_tab_by_query(target_clean)
+                    if cdp_success:
+                        return AppCloseOutput(
+                            target=arguments.target,
+                            status="success",
+                            message=cdp_msg,
+                            verified=True,
+                        )
+            except Exception as cdp_err:
+                logger.debug("CDP close tab attempt error: %s", cdp_err)
+
         try:
             if sys.platform == "win32":
                 if is_tab_or_site:
@@ -1902,6 +1917,329 @@ class MacroDeleteTool(Tool):
         )
 
 
+# ==============================================================================
+# 24. Deep Browser CDP Tools (Chrome DevTools Protocol)
+# ==============================================================================
+
+class BrowserCDPListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filter: str | None = Field(default=None, description="Optional search filter for tab titles or URLs")
+
+
+class BrowserCDPListOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    connected: bool
+    tab_count: int
+    tabs: list[dict[str, Any]] = Field(default_factory=list)
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPListTool(Tool):
+    name = "browser.cdp_list_tabs"
+    description = "Queries active Chrome/Edge DevTools Protocol to enumerate all open browser tabs and targets."
+    input_schema = BrowserCDPListInput
+    output_schema = BrowserCDPListOutput
+    permission_required = False
+    permission_id = "browser.cdp_list_tabs"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPListInput):
+            raise TypeError("BrowserCDPListTool requires BrowserCDPListInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        connected = browser_cdp_manager.is_connected()
+        tabs = browser_cdp_manager.list_tabs()
+        if arguments.filter:
+            f = arguments.filter.strip().lower()
+            tabs = [t for t in tabs if f in t.get("title", "").lower() or f in t.get("url", "").lower()]
+
+        if not connected and not tabs:
+            return BrowserCDPListOutput(
+                status="standby",
+                connected=False,
+                tab_count=0,
+                tabs=[],
+                message="Browser CDP is in standby mode. Say 'launch debug browser' to connect with full introspection.",
+                verified=True,
+            )
+
+        tab_summaries = [f"[{t.get('title')}]" for t in tabs[:5]]
+        preview = ", ".join(tab_summaries) if tab_summaries else "none"
+        return BrowserCDPListOutput(
+            status="success",
+            connected=connected,
+            tab_count=len(tabs),
+            tabs=tabs,
+            message=f"Retrieved {len(tabs)} active browser tabs via CDP: {preview}, sir.",
+            verified=True,
+        )
+
+
+class BrowserCDPOpenInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(description="URL or domain to navigate to in a new browser tab via CDP")
+
+
+class BrowserCDPOpenOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    url: str
+    tab_id: str | None = None
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPOpenTool(Tool):
+    name = "browser.cdp_open_tab"
+    description = "Opens a new browser tab via Chrome DevTools Protocol and automatically focuses it."
+    input_schema = BrowserCDPOpenInput
+    output_schema = BrowserCDPOpenOutput
+    permission_required = False
+    permission_id = "browser.cdp_open_tab"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPOpenInput):
+            raise TypeError("BrowserCDPOpenTool requires BrowserCDPOpenInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        res = browser_cdp_manager.open_tab(arguments.url)
+        return BrowserCDPOpenOutput(
+            status="success" if res.get("success") else "failed",
+            url=res.get("url", arguments.url),
+            tab_id=res.get("id"),
+            message=res.get("message", f"Opened tab for {arguments.url}"),
+            verified=bool(res.get("success")),
+        )
+
+
+class BrowserCDPCloseInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: str = Field(description="Tab ID, title keyword, or URL substring of the tab to close")
+
+
+class BrowserCDPCloseOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    target: str
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPCloseTool(Tool):
+    name = "browser.cdp_close_tab"
+    description = "Closes a specific browser tab via Chrome DevTools Protocol by tab ID, title keyword, or URL."
+    input_schema = BrowserCDPCloseInput
+    output_schema = BrowserCDPCloseOutput
+    permission_required = False
+    permission_id = "browser.cdp_close_tab"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPCloseInput):
+            raise TypeError("BrowserCDPCloseTool requires BrowserCDPCloseInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        t = arguments.target.strip()
+        # Direct tab_id match or title/url query
+        success, msg = browser_cdp_manager.close_tab_by_query(t)
+        if not success:
+            # Try as raw tab ID
+            if browser_cdp_manager.close_tab(t):
+                success = True
+                msg = f"Closed browser tab ID '{t}' via CDP, sir."
+
+        return BrowserCDPCloseOutput(
+            status="success" if success else "failed",
+            target=t,
+            message=msg,
+            verified=success,
+        )
+
+
+class BrowserCDPActivateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: str = Field(description="Tab ID, title keyword, or URL substring of the tab to focus")
+
+
+class BrowserCDPActivateOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    target: str
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPActivateTool(Tool):
+    name = "browser.cdp_activate_tab"
+    description = "Brings a specific browser tab into the foreground via Chrome DevTools Protocol."
+    input_schema = BrowserCDPActivateInput
+    output_schema = BrowserCDPActivateOutput
+    permission_required = False
+    permission_id = "browser.cdp_activate_tab"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPActivateInput):
+            raise TypeError("BrowserCDPActivateTool requires BrowserCDPActivateInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        t = arguments.target.strip().lower()
+        tabs = browser_cdp_manager.list_tabs()
+        matched = next(
+            (tab for tab in tabs if tab.get("id") == t or t in tab.get("title", "").lower() or t in tab.get("url", "").lower()),
+            None,
+        )
+
+        if not matched and tabs and t in {"first", "1", "one"}:
+            matched = tabs[0]
+
+        if matched:
+            ok = browser_cdp_manager.activate_tab(matched["id"])
+            if ok:
+                return BrowserCDPActivateOutput(
+                    status="success",
+                    target=arguments.target,
+                    message=f"Brought browser tab '{matched.get('title')}' to the front, sir.",
+                    verified=True,
+                )
+
+        return BrowserCDPActivateOutput(
+            status="failed",
+            target=arguments.target,
+            message=f"Could not locate an active browser tab matching '{arguments.target}', sir.",
+            verified=False,
+        )
+
+
+class BrowserCDPReloadInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tab_id: str | None = Field(default=None, description="Optional tab ID to reload")
+
+
+class BrowserCDPReloadOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPReloadTool(Tool):
+    name = "browser.cdp_reload_tab"
+    description = "Reloads or refreshes an active browser tab via Chrome DevTools Protocol."
+    input_schema = BrowserCDPReloadInput
+    output_schema = BrowserCDPReloadOutput
+    permission_required = False
+    permission_id = "browser.cdp_reload_tab"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPReloadInput):
+            raise TypeError("BrowserCDPReloadTool requires BrowserCDPReloadInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        ok, msg = browser_cdp_manager.reload_tab(arguments.tab_id)
+        return BrowserCDPReloadOutput(
+            status="success" if ok else "failed",
+            message=msg,
+            verified=ok,
+        )
+
+
+class BrowserCDPEvalInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expression: str = Field(description="JavaScript expression to evaluate in the page context")
+    tab_id: str | None = Field(default=None, description="Optional tab ID, defaults to first open tab")
+
+
+class BrowserCDPEvalOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    result: Any = None
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPEvalTool(Tool):
+    name = "browser.cdp_eval"
+    description = "Evaluates JavaScript in the browser tab context via Chrome DevTools Protocol."
+    input_schema = BrowserCDPEvalInput
+    output_schema = BrowserCDPEvalOutput
+    permission_required = False
+    permission_id = "browser.cdp_eval"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPEvalInput):
+            raise TypeError("BrowserCDPEvalTool requires BrowserCDPEvalInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        tabs = browser_cdp_manager.list_tabs()
+        if not tabs:
+            return BrowserCDPEvalOutput(
+                status="failed",
+                message="No active browser tabs found to evaluate expression, sir.",
+                verified=False,
+            )
+
+        target_id = arguments.tab_id or tabs[0]["id"]
+        res = browser_cdp_manager.evaluate_expression(target_id, arguments.expression)
+        val = res.get("result", {}).get("result", {}).get("value")
+        return BrowserCDPEvalOutput(
+            status="success" if "error" not in res else "failed",
+            result=val if val is not None else res,
+            message=f"Evaluated JS expression on tab: {val}",
+            verified="error" not in res,
+        )
+
+
+class BrowserCDPLaunchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str | None = Field(default=None, description="Initial URL to open")
+    port: int = Field(default=9222, description="Debugging port to bind")
+
+
+class BrowserCDPLaunchOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    port: int
+    message: str
+    verified: bool = True
+
+
+class BrowserCDPLaunchTool(Tool):
+    name = "browser.cdp_launch"
+    description = "Launches Google Chrome or Microsoft Edge with remote debugging enabled for deep CDP management."
+    input_schema = BrowserCDPLaunchInput
+    output_schema = BrowserCDPLaunchOutput
+    permission_required = False
+    permission_id = "browser.cdp_launch"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, BrowserCDPLaunchInput):
+            raise TypeError("BrowserCDPLaunchTool requires BrowserCDPLaunchInput arguments.")
+
+        from backend.app.tools.browser_cdp import browser_cdp_manager
+
+        ok, msg = browser_cdp_manager.launch_debug_browser(url=arguments.url, port=arguments.port)
+        return BrowserCDPLaunchOutput(
+            status="success" if ok else "failed",
+            port=arguments.port,
+            message=msg,
+            verified=ok,
+        )
+
+
 def get_all_system_tools() -> list[Tool]:
     return [
         WebOpenTool(),
@@ -1927,4 +2265,11 @@ def get_all_system_tools() -> list[Tool]:
         MacroPlayTool(),
         MacroListTool(),
         MacroDeleteTool(),
+        BrowserCDPListTool(),
+        BrowserCDPOpenTool(),
+        BrowserCDPCloseTool(),
+        BrowserCDPActivateTool(),
+        BrowserCDPReloadTool(),
+        BrowserCDPEvalTool(),
+        BrowserCDPLaunchTool(),
     ]
