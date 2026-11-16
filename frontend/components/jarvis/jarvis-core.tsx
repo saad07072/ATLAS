@@ -20,6 +20,7 @@ import {
   type MacroItem,
   type BrowserCDPStatus,
   type BrowserCDPTab,
+  type GroundingSource,
 } from "@/services/api";
 import type { SystemVitals } from "@/types";
 import { audioFx } from "@/services/audio-fx";
@@ -94,6 +95,8 @@ export function AtlasCore({
   const [cdpStatus, setCdpStatus] = useState<BrowserCDPStatus | null>(null);
   const [cdpTabs, setCdpTabs] = useState<BrowserCDPTab[]>([]);
   const [newTabUrl, setNewTabUrl] = useState<string>("");
+  const [liveSources, setLiveSources] = useState<GroundingSource[]>([]);
+  const [liveQueries, setLiveQueries] = useState<string[]>([]);
 
   const fetchMacros = useCallback(async () => {
     try {
@@ -666,6 +669,14 @@ export function AtlasCore({
           setTimeout(() => {
             setLastAction(null);
           }, 9000);
+        }
+
+        if (data.sources && data.sources.length > 0) {
+          setLiveSources(data.sources);
+          setLiveQueries(data.grounding_queries || []);
+        } else {
+          setLiveSources([]);
+          setLiveQueries([]);
         }
 
         const reply = data.message || "Right away, sir. Task acknowledged.";
@@ -1298,6 +1309,10 @@ export function AtlasCore({
           </>
         )}
         <div className="hud-telemetry-row right-aligned">
+          <span>LIVE GROUNDING:</span>
+          <span className="hud-val state-listening">CONTINUOUS (SYNCED)</span>
+        </div>
+        <div className="hud-telemetry-row right-aligned">
           <span>MACROS:</span>
           <span className="hud-val">{macros.length} SAVED</span>
         </div>
@@ -1479,6 +1494,30 @@ export function AtlasCore({
             )}
           </div>
           <p className="dialogue-text">{atlasResponse}</p>
+          {liveSources.length > 0 && (
+            <div className="atlas-grounding-sources">
+              <div className="grounding-badge">
+                <span className="grounding-dot" /> REAL-TIME GROUNDED
+                {liveQueries.length > 0 && (
+                  <span className="grounding-query"> — {liveQueries[0]}</span>
+                )}
+              </div>
+              <div className="grounding-links">
+                {liveSources.slice(0, 4).map((src, i) => (
+                  <a
+                    key={i}
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="grounding-link-pill"
+                    title={src.title}
+                  >
+                    🌐 {src.title.length > 40 ? src.title.slice(0, 40) + "…" : src.title}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Holographic Optical Vision Quick Bar */}
@@ -1581,6 +1620,14 @@ export function AtlasCore({
             title="Reload active tab via CDP"
           >
             🔄 Reload Tab
+          </button>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() => void sendToAtlas("what is the latest news today")}
+            title="Query continuous live real-time news & search grounding"
+          >
+            📡 Live News
           </button>
         </div>
 

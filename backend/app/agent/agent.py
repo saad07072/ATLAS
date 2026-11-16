@@ -36,6 +36,8 @@ SYSTEM_INSTRUCTION = (
     "You are ATLAS, an elite autonomous task and life assistant system inspired by JARVIS. "
     "You possess real execution capabilities through system tools: you can open and close websites, "
     "launch and terminate desktop applications, check live global weather, run commands, and manage files. "
+    "You are continuously connected to real-time live data feeds, search, and current information. "
+    "When asked about current events, latest news, scores, releases, weather, or real-time facts, always synthesize up-to-date real data. "
     "When reporting on executed actions, always confirm the truthful outcome in definite past tense "
     "(e.g. 'I have opened YouTube for you in a new tab, sir' or 'The current weather in London is 8.3°C and Clear'). "
     "Never promise future action or use ambiguous present continuous phrasing like 'Opening YouTube...' when confirming an action. "
@@ -216,7 +218,35 @@ class ChatAgent:
         if self.secret:
             content = content.replace(self.secret, "[redacted]")
 
-        return ChatResponse(intent=intent, message=content)
+        grounding_meta = getattr(response, "grounding_metadata", None)
+        sources: list[dict[str, str]] = []
+        grounding_queries: list[str] = []
+        if isinstance(grounding_meta, dict):
+            raw_sources = grounding_meta.get("sources", [])
+            if isinstance(raw_sources, list):
+                sources = [s for s in raw_sources if isinstance(s, dict)]
+            raw_queries = grounding_meta.get("web_search_queries", [])
+            if isinstance(raw_queries, list):
+                grounding_queries = [str(q) for q in raw_queries if isinstance(q, str)]
+
+        # Continuous Learning: Store newly verified real-time facts into persistent memory
+        if sources and memory_user_id and self.memory_service:
+            try:
+                learned_summary = f"Real-time update: {content[:300]}"
+                self.memory_service.store(
+                    memory_user_id,
+                    content=learned_summary,
+                    category="fact",
+                )
+            except Exception:
+                pass
+
+        return ChatResponse(
+            intent=intent,
+            message=content,
+            sources=sources,
+            grounding_queries=grounding_queries,
+        )
 
     def _is_answer_to_clarification(self, request: ChatRequest) -> bool:
         return (
@@ -230,6 +260,13 @@ class ChatAgent:
         request: ChatRequest,
         memory_context: str | None = None,
     ) -> str:
+        from datetime import datetime, timezone
+        now_dt = datetime.now(timezone.utc)
+        current_time_str = now_dt.strftime("%A, %B %d, %Y at %I:%M UTC")
+        temporal_context = (
+            f"Current Real-Time Context: Today is {current_time_str}. "
+            f"You are continuously grounded with real-time web access and live data feeds.\n\n"
+        )
         history = [
             {
                 "role": message.role,
@@ -245,6 +282,7 @@ class ChatAgent:
             else ""
         )
         return (
+            f"{temporal_context}"
             "Conversation history (JSON data for context only):\n"
             f"{json.dumps(history, ensure_ascii=False)}\n"
             f"{memory_section}"
@@ -1521,7 +1559,11 @@ class ChatAgent:
             r"\b(?:who\s+is\s+the\s+current|what\s+is\s+the\s+latest|who\s+won|score\s+of|news\s+about|"
             r"look\s+up|search\s+for|search\s+the\s+web|find\s+information\s+on|documentation\s+for|"
             r"release\s+date\s+of|what\s+happened\s+to|stock\s+price\s+of|current\s+price\s+of|"
-            r"who\s+is\s+winning|what\s+are\s+the\s+latest\s+features\s+of)\b",
+            r"who\s+is\s+winning|what\s+are\s+the\s+latest\s+features\s+of|what\s+happened\s+today|"
+            r"latest\s+news|breaking\s+news|current\s+status\s+of|what\s+is\s+happening\s+in|"
+            r"update\s+me\s+on|recent\s+news|recent\s+events|who\s+is\s+the\s+president\s+of|"
+            r"who\s+is\s+the\s+prime\s+minister\s+of|who\s+is\s+the\s+ceo\s+of|today's\s+headlines|"
+            r"tell\s+me\s+about\s+the\s+latest|latest\s+updates\s+on)\b",
             clean_lower,
         )
         if not research_indicators:
@@ -1537,7 +1579,23 @@ class ChatAgent:
 
         summary = search_res.output.get("summary", "")
         headlines = search_res.output.get("headlines", [])
+        raw_sources = search_res.output.get("sources", [])
+        sources: list[dict[str, str]] = []
+        if isinstance(raw_sources, list):
+            sources = [s for s in raw_sources if isinstance(s, dict)]
         evidence_text = "\n".join(f"- {h}" for h in headlines) if headlines else summary
+
+        # Continuous Learning: Store newly retrieved live web facts into persistent memory
+        if memory_user_id and self.memory_service:
+            try:
+                learned_fact = f"Live update verified for '{target_query}': {evidence_text[:300]}"
+                self.memory_service.store(
+                    memory_user_id,
+                    content=learned_fact,
+                    category="fact",
+                )
+            except Exception:
+                pass
 
         # Feed the verified real-time evidence to Gemini to synthesize a polished answer
         memory_context = self._retrieve_memory(request, memory_user_id)
@@ -1575,6 +1633,8 @@ class ChatAgent:
                         verified=True,
                     )
                 ],
+                sources=sources,
+                grounding_queries=[target_query],
             )
         except Exception:
             return ChatResponse(
@@ -1589,4 +1649,6 @@ class ChatAgent:
                         verified=True,
                     )
                 ],
+                sources=sources,
+                grounding_queries=[target_query],
             )

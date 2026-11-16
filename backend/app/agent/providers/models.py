@@ -55,6 +55,7 @@ class LLMRequest(BaseModel):
     max_output_tokens: int | None = None
     timeout: float | None = None
     tools: list[LLMToolDefinition] = Field(default_factory=list)
+    enable_grounding: bool = True
 
 
 class LLMResponse(BaseModel):
@@ -62,6 +63,7 @@ class LLMResponse(BaseModel):
     model: str = ""
     finish_reason: str | None = None
     usage: LLMUsage | None = None
+    grounding_metadata: dict[str, Any] | None = None
 
 
 class LLMStructuredRequest(LLMRequest):

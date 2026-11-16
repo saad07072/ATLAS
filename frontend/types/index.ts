@@ -18,11 +18,18 @@ export interface ApiHealthResponse {
 
 export type ChatRole = "user" | "assistant";
 
+export interface GroundingSource {
+  title: string;
+  url: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
   timestamp: string;
+  sources?: GroundingSource[];
+  grounding_queries?: string[];
 }
 
 export interface ConversationSummary {

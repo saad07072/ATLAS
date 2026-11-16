@@ -151,6 +151,8 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
                 "requires_clarification": False,
                 "conversation_id": "f7bd17ab-f527-49c8-a464-399b974b9c57",
                 "actions": [],
+                "sources": [],
+                "grounding_queries": [],
             },
         )
 
@@ -820,6 +822,38 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         resp_launch = agent.respond(ChatRequest(message="launch debug browser"))
         self.assertEqual(resp_launch.intent, "task_request")
         self.assertEqual(resp_launch.actions[0].tool, "browser.cdp_launch")
+
+    def test_temporal_anchor_in_prompt(self) -> None:
+        agent = ChatAgent(self.provider)
+        prompt = agent._build_prompt(ChatRequest(message="What is the date today?"))
+        self.assertIn("Current Real-Time Context: Today is", prompt)
+        self.assertIn("Current user message:", prompt)
+
+    def test_continuous_realtime_grounding_sources_and_memory(self) -> None:
+        provider = Mock()
+        fake_response = Mock()
+        fake_response.content = "Manchester City won 3-1 against Liverpool, sir."
+        fake_response.grounding_metadata = {
+            "web_search_queries": ["Manchester City score"],
+            "sources": [{"title": "BBC Sport", "url": "https://bbc.com/sport"}],
+        }
+        provider.generate.return_value = fake_response
+
+        memory_service = Mock()
+        memory_service.retrieve.return_value = []
+        agent = ChatAgent(provider, memory_service=memory_service)
+
+        resp = agent.respond(
+            ChatRequest(message="Who won the match?"),
+            memory_user_id="user-123",
+        )
+        self.assertEqual(resp.message, "Manchester City won 3-1 against Liverpool, sir.")
+        self.assertEqual(len(resp.sources), 1)
+        self.assertEqual(resp.sources[0]["title"], "BBC Sport")
+        self.assertEqual(resp.grounding_queries, ["Manchester City score"])
+        # Verify continuous memory ingestion
+        memory_service.store.assert_called_once()
+        self.assertIn("user-123", memory_service.store.call_args[0])
 
 
 if __name__ == "__main__":

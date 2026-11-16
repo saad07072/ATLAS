@@ -695,6 +695,7 @@ class LiveSearchOutput(BaseModel):
     query: str
     summary: str
     headlines: list[str] = Field(default_factory=list)
+    sources: list[dict[str, str]] = Field(default_factory=list)
     verified: bool = True
 
 
@@ -714,6 +715,7 @@ class LiveSearchTool(Tool):
         query = arguments.query.strip()
         encoded = urllib.parse.quote(query)
         headlines: list[str] = []
+        sources: list[dict[str, str]] = []
 
         # 1. Primary Live Feed: Google News RSS for live sports, breaking news, match updates
         rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
@@ -728,10 +730,16 @@ class LiveSearchTool(Tool):
             root = ET.fromstring(data)
             for it in root.findall(".//item")[:5]:
                 title_elem = it.find("title")
+                link_elem = it.find("link")
                 if title_elem is not None and title_elem.text:
                     cleaned_title = re.sub(r"\s+-\s+[^-]+$", "", title_elem.text).strip()
                     if cleaned_title and cleaned_title not in headlines:
                         headlines.append(cleaned_title)
+                        link_url = (link_elem.text if link_elem is not None and link_elem.text else "").strip()
+                        sources.append({
+                            "title": cleaned_title,
+                            "url": link_url or f"https://news.google.com/search?q={encoded}",
+                        })
         except Exception as exc:
             logger.info("Google News RSS query failed for '%s': %s", query, exc)
 
@@ -748,6 +756,11 @@ class LiveSearchTool(Tool):
                 ddg_abstract = (payload.get("AbstractText") or payload.get("Answer") or "").strip()
                 if ddg_abstract:
                     headlines.append(ddg_abstract)
+                    ddg_url_src = payload.get("AbstractURL") or f"https://duckduckgo.com/?q={encoded}"
+                    sources.append({
+                        "title": ddg_abstract[:80] + ("..." if len(ddg_abstract) > 80 else ""),
+                        "url": ddg_url_src,
+                    })
             except Exception as exc:
                 logger.info("DuckDuckGo Instant Answer query failed for '%s': %s", query, exc)
 
@@ -759,6 +772,7 @@ class LiveSearchTool(Tool):
                 query=query,
                 summary=summary,
                 headlines=headlines,
+                sources=sources,
                 verified=True,
             )
 
@@ -767,6 +781,7 @@ class LiveSearchTool(Tool):
             query=query,
             summary=f"Live feed queried for '{query}', sir. No active match or breaking bulletin found at this moment.",
             headlines=[],
+            sources=[],
             verified=True,
         )
 
