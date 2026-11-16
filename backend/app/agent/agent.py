@@ -603,6 +603,102 @@ class ChatAgent:
                 actions=[ActionExecutionRecord(tool="system.macro_delete", target=del_name, status="success" if result.success else "failed", message=msg, verified=result.success)],
             )
 
+        # 0e. Deep Browser Chrome DevTools Protocol (CDP) Management
+        cdp_launch_match = re.search(
+            r"\b(?:launch|start|open)\s+(?:debug\s+browser|cdp\s+browser|debug\s+chrome|debug\s+edge|browser\s+with\s+cdp)\b",
+            clean_lower,
+        )
+        cdp_list_match = re.search(
+            r"\b(?:list\s+(?:all\s+|open\s+|browser\s+)?tabs|show\s+(?:all\s+|open\s+|browser\s+)?tabs|what\s+tabs\s+(?:are\s+open|do\s+i\s+have)|browser\s+tabs|get\s+tabs)\b",
+            clean_lower,
+        )
+        cdp_switch_match = re.search(
+            r"\b(?:switch\s+to|focus|activate|bring\s+up)\s+(?:browser\s+)?tab\s+([a-zA-Z0-9_\s.-]+)\b",
+            clean_lower,
+        )
+        cdp_reload_match = re.search(
+            r"\b(?:reload|refresh)\s+(?:the\s+)?(?:browser\s+)?(?:tab|page|website)\b",
+            clean_lower,
+        )
+        cdp_close_tab_match = re.search(
+            r"\b(?:close|kill)\s+browser\s+tab\s+([a-zA-Z0-9_\s.-]+)\b",
+            clean_lower,
+        )
+        cdp_eval_match = re.search(
+            r"\b(?:evaluate|eval|run\s+js|execute\s+script)\s+(?:in\s+browser\s+)?(?:tab\s+)?(.+)\b",
+            clean_lower,
+        )
+
+        if cdp_launch_match:
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="browser.cdp_launch", arguments={})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else "Launched debug browser with CDP active, sir."
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="browser.cdp_launch", target="port 9222", status="success" if result.success else "failed", message=msg, verified=result.success)],
+            )
+
+        if cdp_list_match:
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="browser.cdp_list_tabs", arguments={})
+            )
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", "Retrieved open browser tabs, sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="browser.cdp_list_tabs", target="cdp_endpoint", status="success", message=msg, verified=True)],
+                )
+
+        if cdp_switch_match:
+            target_tab = cdp_switch_match.group(1).strip()
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="browser.cdp_activate_tab", arguments={"target": target_tab})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else f"Focused browser tab '{target_tab}', sir."
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="browser.cdp_activate_tab", target=target_tab, status="success" if result.success else "failed", message=msg, verified=result.success)],
+            )
+
+        if cdp_reload_match:
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="browser.cdp_reload_tab", arguments={})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else "Reloaded active browser tab via CDP, sir."
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="browser.cdp_reload_tab", target="active_tab", status="success" if result.success else "failed", message=msg, verified=result.success)],
+            )
+
+        if cdp_close_tab_match:
+            target_tab = cdp_close_tab_match.group(1).strip()
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="browser.cdp_close_tab", arguments={"target": target_tab})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else f"Closed browser tab '{target_tab}' via CDP, sir."
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="browser.cdp_close_tab", target=target_tab, status="success" if result.success else "failed", message=msg, verified=result.success)],
+            )
+
+        if cdp_eval_match:
+            expr = cdp_eval_match.group(1).strip()
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="browser.cdp_eval", arguments={"expression": expr})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else f"Evaluated script in browser: {expr}"
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="browser.cdp_eval", target=expr, status="success" if result.success else "failed", message=msg, verified=result.success)],
+            )
+
         # 1. Capabilities Inquiry
         if re.search(r"\bcan you open (?:any|a) website\b", clean_lower):
             return ChatResponse(

@@ -751,6 +751,76 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp_del.intent, "task_request")
         self.assertIn("deleted", resp_del.message)
 
+    def test_chat_agent_handles_browser_cdp_commands(self) -> None:
+        from backend.app.tools.models import ToolExecutionMetadata, ToolResult
+
+        tool_executor = Mock()
+        tool_executor.registry._tools = {
+            "browser.cdp_list_tabs": Mock(),
+            "browser.cdp_activate_tab": Mock(),
+            "browser.cdp_reload_tab": Mock(),
+            "browser.cdp_close_tab": Mock(),
+            "browser.cdp_launch": Mock(),
+        }
+
+        # 1. List tabs
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="browser.cdp_list_tabs",
+            success=True,
+            output={"status": "success", "message": "Retrieved 2 active browser tabs via CDP: [GitHub], [YouTube], sir.", "tab_count": 2},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        resp_list = agent.respond(ChatRequest(message="list browser tabs"))
+        self.assertEqual(resp_list.intent, "task_request")
+        self.assertEqual(resp_list.actions[0].tool, "browser.cdp_list_tabs")
+        self.assertIn("active browser tabs", resp_list.message)
+
+        # 2. Switch tab
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="browser.cdp_activate_tab",
+            success=True,
+            output={"status": "success", "message": "Brought browser tab 'GitHub' to the front, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_switch = agent.respond(ChatRequest(message="switch to tab github"))
+        self.assertEqual(resp_switch.intent, "task_request")
+        self.assertEqual(resp_switch.actions[0].tool, "browser.cdp_activate_tab")
+        self.assertEqual(resp_switch.actions[0].target, "github")
+
+        # 3. Reload tab
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="browser.cdp_reload_tab",
+            success=True,
+            output={"status": "success", "message": "Reloaded active browser tab via CDP, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_reload = agent.respond(ChatRequest(message="reload browser tab"))
+        self.assertEqual(resp_reload.intent, "task_request")
+        self.assertEqual(resp_reload.actions[0].tool, "browser.cdp_reload_tab")
+
+        # 4. Close tab
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="browser.cdp_close_tab",
+            success=True,
+            output={"status": "success", "message": "Closed browser tab 'github' via CDP, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_close = agent.respond(ChatRequest(message="close browser tab github"))
+        self.assertEqual(resp_close.intent, "task_request")
+        self.assertEqual(resp_close.actions[0].tool, "browser.cdp_close_tab")
+
+        # 5. Launch debug browser
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="browser.cdp_launch",
+            success=True,
+            output={"status": "success", "message": "Launched browser with CDP active on port 9222, sir."},
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_launch = agent.respond(ChatRequest(message="launch debug browser"))
+        self.assertEqual(resp_launch.intent, "task_request")
+        self.assertEqual(resp_launch.actions[0].tool, "browser.cdp_launch")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,8 +9,17 @@ import {
   getSystemVitals,
   getSystemMacros,
   deleteSystemMacro,
+  getBrowserCDPStatus,
+  getBrowserCDPTabs,
+  openBrowserCDPTab,
+  activateBrowserCDPTab,
+  closeBrowserCDPTab,
+  reloadBrowserCDPTab,
+  launchDebugBrowser,
   type ActionRecord,
   type MacroItem,
+  type BrowserCDPStatus,
+  type BrowserCDPTab,
 } from "@/services/api";
 import type { SystemVitals } from "@/types";
 import { audioFx } from "@/services/audio-fx";
@@ -82,6 +91,9 @@ export function AtlasCore({
     name: string | null;
     bufferCount: number;
   }>({ isRecording: false, name: null, bufferCount: 0 });
+  const [cdpStatus, setCdpStatus] = useState<BrowserCDPStatus | null>(null);
+  const [cdpTabs, setCdpTabs] = useState<BrowserCDPTab[]>([]);
+  const [newTabUrl, setNewTabUrl] = useState<string>("");
 
   const fetchMacros = useCallback(async () => {
     try {
@@ -96,6 +108,82 @@ export function AtlasCore({
       // Fallback silently
     }
   }, []);
+
+  const fetchCDP = useCallback(async () => {
+    try {
+      const [statusRes, tabsRes] = await Promise.allSettled([
+        getBrowserCDPStatus(),
+        getBrowserCDPTabs(),
+      ]);
+      if (statusRes.status === "fulfilled") {
+        setCdpStatus(statusRes.value);
+      }
+      if (tabsRes.status === "fulfilled") {
+        setCdpTabs(tabsRes.value.tabs || []);
+      }
+    } catch {
+      // Fallback silently
+    }
+  }, []);
+
+  const handleOpenCDPTab = useCallback(
+    async (url: string) => {
+      if (!url.trim()) return;
+      try {
+        await openBrowserCDPTab(url.trim());
+        setNewTabUrl("");
+        await fetchCDP();
+      } catch (err) {
+        console.warn("Failed to open tab via CDP:", err);
+      }
+    },
+    [fetchCDP],
+  );
+
+  const handleActivateCDPTab = useCallback(
+    async (tabId: string) => {
+      try {
+        await activateBrowserCDPTab(tabId);
+        await fetchCDP();
+      } catch (err) {
+        console.warn("Failed to activate tab:", err);
+      }
+    },
+    [fetchCDP],
+  );
+
+  const handleCloseCDPTab = useCallback(
+    async (tabId: string) => {
+      try {
+        await closeBrowserCDPTab(tabId);
+        await fetchCDP();
+      } catch (err) {
+        console.warn("Failed to close tab:", err);
+      }
+    },
+    [fetchCDP],
+  );
+
+  const handleReloadCDPTab = useCallback(
+    async (tabId?: string) => {
+      try {
+        await reloadBrowserCDPTab(tabId);
+        await fetchCDP();
+      } catch (err) {
+        console.warn("Failed to reload tab:", err);
+      }
+    },
+    [fetchCDP],
+  );
+
+  const handleLaunchDebugBrowser = useCallback(async () => {
+    try {
+      await launchDebugBrowser();
+      setTimeout(() => void fetchCDP(), 1500);
+    } catch (err) {
+      console.warn("Failed to launch debug browser:", err);
+    }
+  }, [fetchCDP]);
 
   const handleDeleteMacro = useCallback(
     async (macroName: string) => {
@@ -113,9 +201,11 @@ export function AtlasCore({
     let isMounted = true;
     const fetchAll = async () => {
       try {
-        const [vitalsRes, macrosRes] = await Promise.allSettled([
+        const [vitalsRes, macrosRes, cdpStatusRes, cdpTabsRes] = await Promise.allSettled([
           getSystemVitals(),
           getSystemMacros(),
+          getBrowserCDPStatus(),
+          getBrowserCDPTabs(),
         ]);
         if (isMounted && vitalsRes.status === "fulfilled") {
           setVitals(vitalsRes.value);
@@ -127,6 +217,12 @@ export function AtlasCore({
             name: macrosRes.value.active_macro || null,
             bufferCount: macrosRes.value.buffer_count,
           });
+        }
+        if (isMounted && cdpStatusRes.status === "fulfilled") {
+          setCdpStatus(cdpStatusRes.value);
+        }
+        if (isMounted && cdpTabsRes.status === "fulfilled") {
+          setCdpTabs(cdpTabsRes.value.tabs || []);
         }
       } catch {
         // Fallback silently if server temporarily offline
@@ -576,6 +672,7 @@ export function AtlasCore({
         setAtlasResponse(reply);
         speakAtlas(reply);
         void fetchMacros();
+        void fetchCDP();
       } catch (err: unknown) {
         if (actionTimerIntervalRef.current) {
           clearInterval(actionTimerIntervalRef.current);
@@ -604,7 +701,7 @@ export function AtlasCore({
         speakAtlas(errorReply);
       }
     },
-    [captureScreenFrame, fetchMacros, speakAtlas, startRecognitionSafe],
+    [captureScreenFrame, fetchCDP, fetchMacros, speakAtlas, startRecognitionSafe],
   );
 
   // -------------------------------------------------------------
@@ -1205,6 +1302,12 @@ export function AtlasCore({
           <span className="hud-val">{macros.length} SAVED</span>
         </div>
         <div className="hud-telemetry-row right-aligned">
+          <span>CDP LINK:</span>
+          <span className={`hud-val ${cdpStatus?.connected ? "state-listening" : ""}`}>
+            {cdpStatus?.connected ? `ACTIVE (${cdpTabs.length} TABS)` : "STANDBY"}
+          </span>
+        </div>
+        <div className="hud-telemetry-row right-aligned">
           <span>FREQUENCY:</span>
           <span className="hud-val">{telemetry.frequency} HZ</span>
         </div>
@@ -1463,6 +1566,22 @@ export function AtlasCore({
           >
             {macroRecording.isRecording ? "⏹️ Save Macro" : "⏺️ Record Macro"}
           </button>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() => void sendToAtlas("list browser tabs")}
+            title="Inspect active browser tabs via CDP"
+          >
+            🌐 Tabs ({cdpTabs.length})
+          </button>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() => void sendToAtlas("reload browser tab")}
+            title="Reload active tab via CDP"
+          >
+            🔄 Reload Tab
+          </button>
         </div>
 
         {/* Sleek Liquid-Glass Quick Command Bar */}
@@ -1590,6 +1709,91 @@ export function AtlasCore({
                         title="Delete macro"
                       >
                         🗑
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="console-macros-section">
+            <div className="cdp-section-header">
+              <h4>Browser CDP Live Control ({cdpTabs.length} Tabs)</h4>
+              <span className={`cdp-conn-pill ${cdpStatus?.connected ? "connected" : "standby"}`}>
+                {cdpStatus?.connected ? `LINKED // ${cdpStatus.browser}` : "STANDBY"}
+              </span>
+            </div>
+
+            <div className="cdp-new-tab-row">
+              <input
+                type="text"
+                className="cdp-tab-input"
+                placeholder="https://... (open new tab via CDP)"
+                value={newTabUrl}
+                onChange={(e) => setNewTabUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleOpenCDPTab(newTabUrl);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="macro-btn play"
+                onClick={() => void handleOpenCDPTab(newTabUrl)}
+              >
+                + Open
+              </button>
+              {!cdpStatus?.connected && (
+                <button
+                  type="button"
+                  className="macro-btn play"
+                  onClick={() => void handleLaunchDebugBrowser()}
+                  title="Launch browser with --remote-debugging-port=9222"
+                >
+                  🚀 Launch CDP
+                </button>
+              )}
+            </div>
+
+            <div className="macro-items-list">
+              {cdpTabs.length === 0 ? (
+                <p className="console-desc">
+                  No active CDP browser tabs found. Click &quot;Launch CDP&quot; or say &quot;Launch debug browser&quot;.
+                </p>
+              ) : (
+                cdpTabs.map((t) => (
+                  <div key={t.id} className="macro-item-card">
+                    <div className="macro-info">
+                      <h5>{t.title || "Untitled Tab"}</h5>
+                      <p className="cdp-tab-url">{t.url}</p>
+                    </div>
+                    <div className="macro-actions">
+                      <button
+                        type="button"
+                        className="macro-btn play"
+                        onClick={() => void handleActivateCDPTab(t.id)}
+                        title="Focus this tab"
+                      >
+                        Focus
+                      </button>
+                      <button
+                        type="button"
+                        className="macro-btn play"
+                        onClick={() => void handleReloadCDPTab(t.id)}
+                        title="Reload tab"
+                      >
+                        🔄
+                      </button>
+                      <button
+                        type="button"
+                        className="macro-btn del"
+                        onClick={() => void handleCloseCDPTab(t.id)}
+                        title="Close tab"
+                      >
+                        ×
                       </button>
                     </div>
                   </div>

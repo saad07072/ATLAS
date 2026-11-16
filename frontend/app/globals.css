@@ -2561,6 +2561,65 @@ img {
   color: #fff;
 }
 
+.cdp-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.cdp-conn-pill {
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.cdp-conn-pill.connected {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.cdp-conn-pill.standby {
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #facc15;
+}
+
+.cdp-new-tab-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.cdp-tab-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-size: 0.7rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.cdp-tab-input:focus {
+  outline: none;
+  border-color: #00f0ff;
+}
+
+.cdp-tab-url {
+  font-family: monospace;
+  font-size: 0.6rem !important;
+  color: #64748b !important;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 
 /* ========================================================================= */
 /* MINI-HUD FLOATING OVERLAY MODE                                            */

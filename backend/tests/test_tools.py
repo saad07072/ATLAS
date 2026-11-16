@@ -516,6 +516,71 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertTrue(del_res.verified)
         self.assertIsNone(macro_manager.get_macro("unit_test_routine"))
 
+    def test_browser_cdp_tools_lifecycle(self) -> None:
+        from backend.app.tools.system_tools import (
+            BrowserCDPListTool, BrowserCDPListInput,
+            BrowserCDPOpenTool, BrowserCDPOpenInput,
+            BrowserCDPCloseTool, BrowserCDPCloseInput,
+            BrowserCDPActivateTool, BrowserCDPActivateInput,
+            BrowserCDPReloadTool, BrowserCDPReloadInput,
+            BrowserCDPEvalTool, BrowserCDPEvalInput,
+            BrowserCDPLaunchTool, BrowserCDPLaunchInput,
+        )
+
+        with unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.is_connected", return_value=True), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.list_tabs", return_value=[
+                 {"id": "TAB_1", "title": "GitHub", "url": "https://github.com", "type": "page"}
+             ]), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.open_tab", return_value={"success": True, "id": "TAB_2", "url": "https://example.com", "title": "Example"}), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.close_tab_by_query", return_value=(True, "Closed GitHub tab")), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.activate_tab", return_value=True), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.reload_tab", return_value=(True, "Reloaded GitHub tab")), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.evaluate_expression", return_value={"result": {"result": {"value": "document title"}}}), \
+             unittest.mock.patch("backend.app.tools.browser_cdp.browser_cdp_manager.launch_debug_browser", return_value=(True, "Launched debug browser")):
+
+            # 1. List tabs
+            list_tool = BrowserCDPListTool()
+            list_out = list_tool.execute(BrowserCDPListInput())
+            self.assertEqual(list_out.status, "success")
+            self.assertTrue(list_out.connected)
+            self.assertEqual(list_out.tab_count, 1)
+
+            # 2. Open tab
+            open_tool = BrowserCDPOpenTool()
+            open_out = open_tool.execute(BrowserCDPOpenInput(url="https://example.com"))
+            self.assertEqual(open_out.status, "success")
+            self.assertTrue(open_out.verified)
+
+            # 3. Activate tab
+            act_tool = BrowserCDPActivateTool()
+            act_out = act_tool.execute(BrowserCDPActivateInput(target="GitHub"))
+            self.assertEqual(act_out.status, "success")
+            self.assertTrue(act_out.verified)
+
+            # 4. Reload tab
+            rel_tool = BrowserCDPReloadTool()
+            rel_out = rel_tool.execute(BrowserCDPReloadInput(tab_id="TAB_1"))
+            self.assertEqual(rel_out.status, "success")
+            self.assertTrue(rel_out.verified)
+
+            # 5. Eval JS in tab
+            eval_tool = BrowserCDPEvalTool()
+            eval_out = eval_tool.execute(BrowserCDPEvalInput(expression="document.title"))
+            self.assertEqual(eval_out.status, "success")
+            self.assertEqual(eval_out.result, "document title")
+
+            # 6. Close tab
+            close_tool = BrowserCDPCloseTool()
+            close_out = close_tool.execute(BrowserCDPCloseInput(target="GitHub"))
+            self.assertEqual(close_out.status, "success")
+            self.assertTrue(close_out.verified)
+
+            # 7. Launch debug browser
+            launch_tool = BrowserCDPLaunchTool()
+            launch_out = launch_tool.execute(BrowserCDPLaunchInput(url="https://github.com", port=9222))
+            self.assertEqual(launch_out.status, "success")
+            self.assertTrue(launch_out.verified)
+
 
 if __name__ == "__main__":
     unittest.main()
