@@ -77,3 +77,5 @@ class ChatResponse(BaseModel):
     requires_clarification: bool = False
     conversation_id: UUID | None = None
     actions: list[ActionExecutionRecord] = Field(default_factory=list)
+    sources: list[dict[str, str]] = Field(default_factory=list)
+    grounding_queries: list[str] = Field(default_factory=list)

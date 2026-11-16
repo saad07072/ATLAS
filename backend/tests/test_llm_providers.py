@@ -180,6 +180,51 @@ class LLMProviderTests(unittest.TestCase):
         )
         self.assertIn("Local Offline", response.content)
 
+    def test_gemini_build_config_enables_google_search_grounding(self) -> None:
+        fake_settings = Settings(
+            _env_file=None,
+            gemini_api_key="test-key",
+            gemini_grounding_enabled=True,
+        )
+        provider = GeminiProvider(settings=fake_settings)
+        cfg = provider._build_config(LLMRequest(enable_grounding=True))
+        self.assertIsNotNone(cfg.tools)
+        self.assertEqual(len(cfg.tools), 1)
+
+    def test_gemini_generate_extracts_grounding_metadata(self) -> None:
+        fake_settings = Settings(
+            _env_file=None,
+            gemini_api_key="test-key",
+            gemini_grounding_enabled=True,
+        )
+        provider = GeminiProvider(settings=fake_settings)
+
+        mock_sdk_response = Mock()
+        mock_sdk_response.text = "Manchester City won their match."
+        mock_candidate = Mock()
+        mock_candidate.finish_reason = "STOP"
+        mock_candidate.content = Mock(parts=[Mock(text="Manchester City won their match.")])
+
+        mock_web_chunk = Mock()
+        mock_web_chunk.web = Mock(uri="https://sports.example.com/mancity", title="Man City Highlights")
+        mock_gm = Mock()
+        mock_gm.web_search_queries = ["Manchester City latest score"]
+        mock_gm.grounding_chunks = [mock_web_chunk]
+        mock_candidate.grounding_metadata = mock_gm
+
+        mock_sdk_response.candidates = [mock_candidate]
+        mock_sdk_response.usage_metadata = None
+
+        provider.client = Mock()
+        provider.client.models.generate_content.return_value = mock_sdk_response
+
+        response = provider.generate(LLMRequest(messages=[LLMMessage(role="user", content="latest match")]))
+        self.assertEqual(response.content, "Manchester City won their match.")
+        self.assertIsNotNone(response.grounding_metadata)
+        self.assertIn("Manchester City latest score", response.grounding_metadata["web_search_queries"])
+        self.assertEqual(len(response.grounding_metadata["sources"]), 1)
+        self.assertEqual(response.grounding_metadata["sources"][0]["url"], "https://sports.example.com/mancity")
+
 
 if __name__ == "__main__":
     unittest.main()

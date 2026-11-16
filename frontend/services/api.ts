@@ -36,6 +36,11 @@ export interface ActionRecord {
   verified?: boolean;
 }
 
+export interface GroundingSource {
+  title: string;
+  url: string;
+}
+
 export interface ChatApiResponse {
   intent:
     | "conversation"
@@ -47,6 +52,8 @@ export interface ChatApiResponse {
   requires_clarification: boolean;
   conversation_id: string;
   actions?: ActionRecord[];
+  sources?: GroundingSource[];
+  grounding_queries?: string[];
 }
 
 export interface GoogleConnectionStatus {

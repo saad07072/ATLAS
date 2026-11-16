@@ -60,18 +60,30 @@ class GeminiProvider(LLMProvider):
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         models_to_try = [request.model or self.model_name]
-        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash"):
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 
         last_exc: Exception | None = None
         for idx, model_to_use in enumerate(models_to_try):
             def _operation() -> LLMResponse:
-                response = self.client.models.generate_content(
-                    model=model_to_use,
-                    contents=self._to_contents(request.messages),
-                    config=self._build_config(request),
-                )
+                try:
+                    response = self.client.models.generate_content(
+                        model=model_to_use,
+                        contents=self._to_contents(request.messages),
+                        config=self._build_config(request),
+                    )
+                except Exception as call_exc:
+                    # If google_search grounding tool is rejected or fails on this model, retry gracefully without it
+                    if request.enable_grounding:
+                        no_grounding_req = request.model_copy(update={"enable_grounding": False})
+                        response = self.client.models.generate_content(
+                            model=model_to_use,
+                            contents=self._to_contents(no_grounding_req.messages),
+                            config=self._build_config(no_grounding_req),
+                        )
+                    else:
+                        raise call_exc
                 return self._map_response(response, model_to_use)
 
             try:
@@ -91,7 +103,7 @@ class GeminiProvider(LLMProvider):
     ) -> LLMStructuredResponse:
         schema = self._normalize_schema(request.response_schema)
         models_to_try = [request.model or self.model_name]
-        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash"):
+        for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"):
             if fallback not in models_to_try:
                 models_to_try.append(fallback)
 
@@ -175,6 +187,12 @@ class GeminiProvider(LLMProvider):
         if schema:
             config_kwargs["response_mime_type"] = "application/json"
             config_kwargs["response_schema"] = schema
+        elif getattr(request, "enable_grounding", True) and getattr(self.settings, "gemini_grounding_enabled", True):
+            # Ground output using Google Search for continuous real-time live data
+            try:
+                config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+            except Exception:
+                pass
 
         return types.GenerateContentConfig(**config_kwargs)
 
@@ -201,12 +219,44 @@ class GeminiProvider(LLMProvider):
         model_name: str,
     ) -> LLMResponse:
         content = self._extract_text(response)
+        grounding_meta = self._extract_grounding_metadata(response)
         return LLMResponse(
             content=content,
             model=model_name,
             finish_reason=self._extract_finish_reason(response),
             usage=self._extract_usage(response),
+            grounding_metadata=grounding_meta,
         )
+
+    def _extract_grounding_metadata(self, response: Any) -> dict[str, Any] | None:
+        try:
+            candidates = getattr(response, "candidates", None) or []
+            if not candidates:
+                return None
+            gm = getattr(candidates[0], "grounding_metadata", None)
+            if not gm:
+                return None
+
+            web_queries = list(getattr(gm, "web_search_queries", None) or [])
+            chunks = getattr(gm, "grounding_chunks", None) or []
+            sources: list[dict[str, str]] = []
+            for chunk in chunks:
+                web = getattr(chunk, "web", None)
+                if web:
+                    uri = getattr(web, "uri", None)
+                    title = getattr(web, "title", None)
+                    if uri:
+                        sources.append({"title": str(title or uri), "url": str(uri)})
+
+            if not web_queries and not sources:
+                return None
+
+            return {
+                "web_search_queries": web_queries,
+                "sources": sources,
+            }
+        except Exception:
+            return None
 
     def _extract_text(self, response: Any) -> str:
         if hasattr(response, "text") and response.text:

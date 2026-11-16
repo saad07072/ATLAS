@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3"
     offline_fallback_enabled: bool = False
+    gemini_grounding_enabled: bool = True
 
     google_oauth_client_id: str | None = Field(
         default=None,
