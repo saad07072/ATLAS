@@ -19,7 +19,6 @@ const geistMono = Geist_Mono({
 const orbitron = Orbitron({
   variable: "--font-orbitron",
   subsets: ["latin"],
-  weight: ["500", "700", "900"],
 });
 
 const rajdhani = Rajdhani({
