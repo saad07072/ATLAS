@@ -469,6 +469,53 @@ class ToolFrameworkTests(unittest.TestCase):
         self.assertTrue(res_with_img.verified)
         self.assertIn("debug_error", res_with_img.message)
 
+    def test_macro_tools_lifecycle(self) -> None:
+        from backend.app.tools.system_tools import (
+            MacroRecordTool,
+            MacroRecordInput,
+            MacroPlayTool,
+            MacroPlayInput,
+            MacroListTool,
+            MacroListInput,
+            MacroDeleteTool,
+            MacroDeleteInput,
+        )
+        from backend.app.tools.macro_manager import macro_manager
+
+        macro_manager.cancel_recording()
+
+        rec_tool = MacroRecordTool()
+        start_res = rec_tool.execute(MacroRecordInput(action="start", macro_name="unit_test_routine"))
+        self.assertEqual(start_res.status, "recording")
+        self.assertEqual(start_res.macro_name, "unit_test_routine")
+        self.assertTrue(macro_manager.is_recording())
+
+        macro_manager.record_step("web.open", "https://example.com", {"url": "https://example.com"}, "Open test")
+
+        stop_res = rec_tool.execute(MacroRecordInput(action="stop"))
+        self.assertEqual(stop_res.status, "saved")
+        self.assertEqual(stop_res.macro_name, "unit_test_routine")
+        self.assertEqual(stop_res.step_count, 1)
+        self.assertFalse(macro_manager.is_recording())
+
+        list_tool = MacroListTool()
+        list_res = list_tool.execute(MacroListInput(filter="unit_test_routine"))
+        self.assertEqual(list_res.status, "success")
+        self.assertTrue(any(m["name"] == "unit_test_routine" for m in list_res.macros))
+
+        play_tool = MacroPlayTool()
+        with unittest.mock.patch("webbrowser.open"):
+            play_res = play_tool.execute(MacroPlayInput(macro_name="unit_test_routine"))
+            self.assertEqual(play_res.status, "success")
+            self.assertTrue(play_res.verified)
+            self.assertEqual(len(play_res.executed_steps), 1)
+
+        del_tool = MacroDeleteTool()
+        del_res = del_tool.execute(MacroDeleteInput(macro_name="unit_test_routine"))
+        self.assertEqual(del_res.status, "success")
+        self.assertTrue(del_res.verified)
+        self.assertIsNone(macro_manager.get_macro("unit_test_routine"))
+
 
 if __name__ == "__main__":
     unittest.main()

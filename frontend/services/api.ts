@@ -374,3 +374,78 @@ export async function getDashboardSummary(): Promise<import("@/types").Dashboard
 export async function getSystemVitals(): Promise<SystemVitals> {
   return request<SystemVitals>("/api/v1/system/vitals");
 }
+
+export interface MacroItem {
+  name: string;
+  description: string;
+  steps: Array<{
+    tool: string;
+    target?: string;
+    arguments?: Record<string, unknown>;
+    description?: string;
+  }>;
+  created_at?: string;
+}
+
+export interface MacroListResponse {
+  macros: MacroItem[];
+  is_recording: boolean;
+  active_macro?: string | null;
+  buffer_count: number;
+}
+
+export interface MacroRecordResponse {
+  status: string;
+  message: string;
+  macro_name?: string | null;
+  step_count: number;
+}
+
+export interface MacroPlayResponse {
+  status: string;
+  message: string;
+  macro_name: string;
+  executed_steps: Array<{
+    tool: string;
+    target?: string;
+    status: string;
+    message: string;
+    verified: boolean;
+  }>;
+  verified: boolean;
+}
+
+export async function getSystemMacros(): Promise<MacroListResponse> {
+  return request<MacroListResponse>("/api/v1/system/macros");
+}
+
+export async function recordSystemMacro(
+  action: "start" | "stop" | "cancel",
+  macroName?: string,
+): Promise<MacroRecordResponse> {
+  return request<MacroRecordResponse>("/api/v1/system/macros/record", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, macro_name: macroName }),
+  });
+}
+
+export async function playSystemMacro(macroName: string): Promise<MacroPlayResponse> {
+  return request<MacroPlayResponse>(
+    `/api/v1/system/macros/${encodeURIComponent(macroName)}/play`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function deleteSystemMacro(
+  macroName: string,
+): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>(
+    `/api/v1/system/macros/${encodeURIComponent(macroName)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}

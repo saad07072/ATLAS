@@ -177,6 +177,15 @@ class ChatAgent:
 
         action_response = self._try_execute_action(request.message, request.image_data, memory_user_id)
         if action_response is not None:
+            from backend.app.tools.macro_manager import macro_manager
+            if macro_manager.is_recording() and action_response.actions:
+                for act in action_response.actions:
+                    if act.status == "success" and not act.tool.startswith("system.macro_"):
+                        macro_manager.record_step(
+                            tool=act.tool,
+                            target=act.target,
+                            description=act.message,
+                        )
             return action_response
 
         cognitive_response = self._try_cognitive_tool_execution(request, memory_user_id)
@@ -480,6 +489,118 @@ class ChatAgent:
                         verified=True,
                     )
                 ],
+            )
+
+        # 0d. Autonomous Desktop Macro Recording & Playback
+        rec_start_match = re.search(
+            r"\b(?:start\s+recording|record)\s+(?:macro|routine|task)\s+([a-zA-Z0-9_\s-]+)\b",
+            clean_lower,
+        )
+        rec_stop_match = re.search(
+            r"\b(?:stop\s+recording(?:\s+macro)?|save\s+(?:the\s+)?macro|finish\s+recording(?:\s+macro)?|save\s+recorded\s+macro)\b",
+            clean_lower,
+        )
+        macro_play_match = re.search(
+            r"\b(?:run|play|execute|trigger|start)\s+macro\s+([a-zA-Z0-9_\s-]+)\b",
+            clean_lower,
+        )
+        macro_list_match = re.search(
+            r"\b(?:list\s+(?:all\s+|my\s+)?macros|show\s+(?:all\s+|my\s+)?macros|what\s+macros\s+(?:do\s+i\s+have|are\s+there)|saved\s+macros)\b",
+            clean_lower,
+        )
+        macro_delete_match = re.search(
+            r"\b(?:delete|remove)\s+macro\s+([a-zA-Z0-9_\s-]+)\b",
+            clean_lower,
+        )
+
+        if rec_start_match:
+            macro_name = rec_start_match.group(1).strip()
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="system.macro_record", arguments={"action": "start", "macro_name": macro_name})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else f"Started recording macro '{macro_name}', sir."
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="system.macro_record", target=macro_name, status="success", message=msg, verified=True)],
+            )
+
+        if rec_stop_match:
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="system.macro_record", arguments={"action": "stop"})
+            )
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", "Macro saved successfully, sir.")
+                name = result.output.get("macro_name", "custom_routine")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.macro_record", target=name, status="success", message=msg, verified=True)],
+                )
+            return ChatResponse(
+                intent="task_request",
+                message="No active macro recording was in progress to save, sir.",
+                actions=[ActionExecutionRecord(tool="system.macro_record", target="active_session", status="failed", message="No active recording", verified=False)],
+            )
+
+        if macro_play_match:
+            target_macro = macro_play_match.group(1).strip()
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="system.macro_play", arguments={"macro_name": target_macro})
+            )
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", f"Macro '{target_macro}' executed, sir.")
+                raw_steps = result.output.get("executed_steps", [])
+                action_records = []
+                for s in raw_steps:
+                    action_records.append(
+                        ActionExecutionRecord(
+                            tool=s.get("tool", "system.macro_play"),
+                            target=s.get("target", target_macro),
+                            status=s.get("status", "success"),
+                            message=s.get("message", "Executed macro step"),
+                            verified=bool(s.get("verified", True)),
+                        )
+                    )
+                if not action_records:
+                    action_records.append(
+                        ActionExecutionRecord(
+                            tool="system.macro_play",
+                            target=target_macro,
+                            status="success",
+                            message=msg,
+                            verified=True,
+                        )
+                    )
+                return ChatResponse(intent="task_request", message=msg, actions=action_records)
+            return ChatResponse(
+                intent="task_request",
+                message=f"Could not execute macro '{target_macro}', sir: {result.error}",
+                actions=[ActionExecutionRecord(tool="system.macro_play", target=target_macro, status="failed", message=f"Failed: {result.error}", verified=False)],
+            )
+
+        if macro_list_match:
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="system.macro_list", arguments={})
+            )
+            if result.success and isinstance(result.output, dict):
+                msg = result.output.get("message", "Retrieved saved macros, sir.")
+                return ChatResponse(
+                    intent="task_request",
+                    message=msg,
+                    actions=[ActionExecutionRecord(tool="system.macro_list", target="macros", status="success", message=msg, verified=True)],
+                )
+
+        if macro_delete_match:
+            del_name = macro_delete_match.group(1).strip()
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="system.macro_delete", arguments={"macro_name": del_name})
+            )
+            msg = result.output.get("message") if (result.success and isinstance(result.output, dict)) else f"Processed macro '{del_name}' deletion, sir."
+            return ChatResponse(
+                intent="task_request",
+                message=msg,
+                actions=[ActionExecutionRecord(tool="system.macro_delete", target=del_name, status="success" if result.success else "failed", message=msg, verified=result.success)],
             )
 
         # 1. Capabilities Inquiry

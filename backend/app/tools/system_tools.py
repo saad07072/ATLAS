@@ -14,6 +14,7 @@ import urllib.request
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -1694,6 +1695,213 @@ class ScreenInspectTool(Tool):
         )
 
 
+# ==============================================================================
+# 23. Autonomous Desktop Macro Tools (Record, Play, List, Delete)
+# ==============================================================================
+
+class MacroRecordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str = Field(description="Record action: start, add_step, stop, cancel")
+    macro_name: str | None = Field(default=None, description="Name of the macro to record or save")
+    step: dict[str, Any] | None = Field(default=None, description="Step details if adding manually")
+    description: str | None = Field(default=None, description="Description of the macro")
+
+
+class MacroRecordOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    message: str
+    macro_name: str | None = None
+    step_count: int = 0
+    verified: bool = True
+
+
+class MacroRecordTool(Tool):
+    name = "system.macro_record"
+    description = "Controls macro recording sessions: start recording, add step, stop and save, or cancel."
+    input_schema = MacroRecordInput
+    output_schema = MacroRecordOutput
+    permission_required = False
+    permission_id = "system.macro_record"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, MacroRecordInput):
+            raise TypeError("MacroRecordTool requires MacroRecordInput arguments.")
+
+        from backend.app.tools.macro_manager import macro_manager
+
+        act = arguments.action.strip().lower()
+
+        if act == "start":
+            name = arguments.macro_name or "custom_routine"
+            saved_key = macro_manager.start_recording(name)
+            return MacroRecordOutput(
+                status="recording",
+                message=f"Macro recording initiated for '{saved_key}', sir. Perform your actions, then say 'Stop recording' or 'Save macro'.",
+                macro_name=saved_key,
+                step_count=0,
+                verified=True,
+            )
+        elif act in {"stop", "save"}:
+            saved = macro_manager.stop_recording()
+            if not saved:
+                return MacroRecordOutput(
+                    status="failed",
+                    message="No active macro recording session was in progress, sir.",
+                    step_count=0,
+                    verified=False,
+                )
+            return MacroRecordOutput(
+                status="saved",
+                message=f"Macro '{saved['name']}' saved successfully with {len(saved.get('steps', []))} steps, sir.",
+                macro_name=saved["name"],
+                step_count=len(saved.get("steps", [])),
+                verified=True,
+            )
+        elif act == "cancel":
+            macro_manager.cancel_recording()
+            return MacroRecordOutput(
+                status="cancelled",
+                message="Macro recording cancelled, sir. Buffer discarded.",
+                step_count=0,
+                verified=True,
+            )
+        else:
+            return MacroRecordOutput(
+                status="error",
+                message=f"Unknown recording action '{act}', sir.",
+                step_count=0,
+                verified=False,
+            )
+
+
+class MacroPlayInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    macro_name: str = Field(description="Name of the saved macro routine to play")
+
+
+class MacroPlayOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    macro_name: str
+    message: str
+    executed_steps: list[dict[str, Any]] = Field(default_factory=list)
+    verified: bool = True
+
+
+class MacroPlayTool(Tool):
+    name = "system.macro_play"
+    description = "Executes a custom recorded desktop macro routine by name, returning verified outcomes for every step."
+    input_schema = MacroPlayInput
+    output_schema = MacroPlayOutput
+    permission_required = False
+    permission_id = "system.macro_play"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, MacroPlayInput):
+            raise TypeError("MacroPlayTool requires MacroPlayInput arguments.")
+
+        from backend.app.tools.macro_manager import macro_manager
+
+        success, msg, steps = macro_manager.execute_macro(arguments.macro_name)
+        return MacroPlayOutput(
+            status="success" if success else "failed",
+            macro_name=arguments.macro_name,
+            message=msg,
+            executed_steps=steps,
+            verified=success,
+        )
+
+
+class MacroListInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filter: str | None = Field(default=None, description="Optional search filter for macro names")
+
+
+class MacroListOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    macros: list[dict[str, Any]] = Field(default_factory=list)
+    message: str
+    verified: bool = True
+
+
+class MacroListTool(Tool):
+    name = "system.macro_list"
+    description = "Enumerates all saved custom desktop macros and routines."
+    input_schema = MacroListInput
+    output_schema = MacroListOutput
+    permission_required = False
+    permission_id = "system.macro_list"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, MacroListInput):
+            raise TypeError("MacroListTool requires MacroListInput arguments.")
+
+        from backend.app.tools.macro_manager import macro_manager
+
+        macros = macro_manager.list_macros()
+        if arguments.filter:
+            f = arguments.filter.lower()
+            macros = [m for m in macros if f in m.get("name", "").lower() or f in m.get("description", "").lower()]
+
+        names = ", ".join(m.get("name", "") for m in macros) if macros else "None"
+        msg = f"Found {len(macros)} custom macros: {names}, sir."
+        return MacroListOutput(
+            status="success",
+            macros=macros,
+            message=msg,
+            verified=True,
+        )
+
+
+class MacroDeleteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    macro_name: str = Field(description="Name of the custom macro to delete")
+
+
+class MacroDeleteOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    macro_name: str
+    message: str
+    verified: bool = True
+
+
+class MacroDeleteTool(Tool):
+    name = "system.macro_delete"
+    description = "Deletes a saved custom desktop macro by name."
+    input_schema = MacroDeleteInput
+    output_schema = MacroDeleteOutput
+    permission_required = False
+    permission_id = "system.macro_delete"
+    risk_level = "low"
+
+    def execute(self, arguments: BaseModel) -> BaseModel:
+        if not isinstance(arguments, MacroDeleteInput):
+            raise TypeError("MacroDeleteTool requires MacroDeleteInput arguments.")
+
+        from backend.app.tools.macro_manager import macro_manager
+
+        deleted = macro_manager.delete_macro(arguments.macro_name)
+        if deleted:
+            return MacroDeleteOutput(
+                status="success",
+                macro_name=arguments.macro_name,
+                message=f"Macro '{arguments.macro_name}' has been deleted from your saved routines, sir.",
+                verified=True,
+            )
+        return MacroDeleteOutput(
+            status="failed",
+            macro_name=arguments.macro_name,
+            message=f"Macro '{arguments.macro_name}' could not be found to delete, sir.",
+            verified=False,
+        )
+
+
 def get_all_system_tools() -> list[Tool]:
     return [
         WebOpenTool(),
@@ -1715,4 +1923,8 @@ def get_all_system_tools() -> list[Tool]:
         LockWorkstationTool(),
         ProtocolExecutionTool(),
         ScreenInspectTool(),
+        MacroRecordTool(),
+        MacroPlayTool(),
+        MacroListTool(),
+        MacroDeleteTool(),
     ]

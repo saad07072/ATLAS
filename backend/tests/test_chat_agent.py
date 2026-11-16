@@ -658,6 +658,98 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.actions[0].tool, "system.vitals")
         self.assertEqual(response.actions[0].status, "success")
 
+    def test_chat_agent_handles_macro_recording_and_playback(self) -> None:
+        from backend.app.tools.macro_manager import macro_manager
+        from backend.app.tools.models import ToolExecutionMetadata, ToolResult
+
+        macro_manager.cancel_recording()
+        tool_executor = Mock()
+        tool_executor.registry._tools = {
+            "system.macro_record": Mock(),
+            "system.macro_play": Mock(),
+            "system.macro_list": Mock(),
+            "system.macro_delete": Mock(),
+        }
+
+        # 1. Start recording
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.macro_record",
+            success=True,
+            output={
+                "status": "recording",
+                "message": "Macro recording initiated for 'morning_run', sir.",
+                "macro_name": "morning_run",
+                "step_count": 0,
+            },
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+        resp = agent.respond(ChatRequest(message="start recording macro morning_run"))
+        self.assertEqual(resp.intent, "task_request")
+        self.assertIn("morning_run", resp.message)
+        self.assertEqual(resp.actions[0].tool, "system.macro_record")
+
+        # 2. Stop recording
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.macro_record",
+            success=True,
+            output={
+                "status": "saved",
+                "message": "Macro 'morning_run' saved successfully with 1 steps, sir.",
+                "macro_name": "morning_run",
+                "step_count": 1,
+            },
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_stop = agent.respond(ChatRequest(message="stop recording macro"))
+        self.assertEqual(resp_stop.intent, "task_request")
+        self.assertIn("saved successfully", resp_stop.message)
+
+        # 3. List macros
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.macro_list",
+            success=True,
+            output={
+                "status": "success",
+                "message": "Found 1 custom macros: morning_run, sir.",
+                "macros": [{"name": "morning_run"}],
+            },
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_list = agent.respond(ChatRequest(message="list my macros"))
+        self.assertEqual(resp_list.intent, "task_request")
+        self.assertIn("Found 1 custom macros", resp_list.message)
+
+        # 4. Play macro
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.macro_play",
+            success=True,
+            output={
+                "status": "success",
+                "message": "Macro 'morning_run' completed, sir.",
+                "executed_steps": [
+                    {"tool": "web.open", "target": "https://news.ycombinator.com", "status": "success", "message": "Opened news", "verified": True}
+                ],
+            },
+            metadata=ToolExecutionMetadata(duration_ms=10.0),
+        )
+        resp_play = agent.respond(ChatRequest(message="run macro morning_run"))
+        self.assertEqual(resp_play.intent, "task_request")
+        self.assertEqual(resp_play.actions[0].tool, "web.open")
+
+        # 5. Delete macro
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.macro_delete",
+            success=True,
+            output={
+                "status": "success",
+                "message": "Macro 'morning_run' has been deleted, sir.",
+            },
+            metadata=ToolExecutionMetadata(duration_ms=5.0),
+        )
+        resp_del = agent.respond(ChatRequest(message="delete macro morning_run"))
+        self.assertEqual(resp_del.intent, "task_request")
+        self.assertIn("deleted", resp_del.message)
 
 
 if __name__ == "__main__":
