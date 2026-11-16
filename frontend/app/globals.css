@@ -2379,6 +2379,188 @@ img {
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
 }
 
+/* ========================================================================= */
+/* HOLOGRAPHIC TASK RECORDER & MACRO BAR                                      */
+/* ========================================================================= */
+
+.hud-recording-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 9999px;
+  backdrop-filter: blur(8px);
+  animation: pulse 1.5s infinite;
+}
+
+.rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.rec-dot.red {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+}
+
+.rec-text {
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.06em;
+}
+
+.rec-stop-btn {
+  background: rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fff;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rec-stop-btn:hover {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+}
+
+.atlas-protocol-quick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(0, 240, 255, 0.05);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 9999px;
+  backdrop-filter: blur(8px);
+}
+
+.protocol-quick-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 0.22rem 0.6rem;
+  border-radius: 9999px;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.protocol-quick-btn:hover {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: #00f0ff;
+  color: #00f0ff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+}
+
+.console-macros-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.console-macros-section h4 {
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #00f0ff;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.macro-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.macro-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.macro-item-card:hover {
+  border-color: rgba(0, 240, 255, 0.4);
+  background: rgba(0, 240, 255, 0.06);
+}
+
+.macro-info h5 {
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.72rem;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.macro-info p {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  margin: 0.15rem 0 0 0;
+}
+
+.macro-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.macro-btn {
+  padding: 0.2rem 0.45rem;
+  font-family: var(--font-orbitron), monospace;
+  font-size: 0.62rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.macro-btn.play {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+.macro-btn.play:hover {
+  background: #10b981;
+  color: #000;
+}
+
+.macro-btn.del {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.macro-btn.del:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
 
 /* ========================================================================= */
 /* MINI-HUD FLOATING OVERLAY MODE                                            */

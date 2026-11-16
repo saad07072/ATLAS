@@ -4,7 +4,14 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
-import { sendChatMessage, getSystemVitals, type ActionRecord } from "@/services/api";
+import {
+  sendChatMessage,
+  getSystemVitals,
+  getSystemMacros,
+  deleteSystemMacro,
+  type ActionRecord,
+  type MacroItem,
+} from "@/services/api";
 import type { SystemVitals } from "@/types";
 import { audioFx } from "@/services/audio-fx";
 
@@ -69,21 +76,64 @@ export function AtlasCore({
     activeVoice: "Detecting neural voice...",
   });
   const [vitals, setVitals] = useState<SystemVitals | null>(null);
+  const [macros, setMacros] = useState<MacroItem[]>([]);
+  const [macroRecording, setMacroRecording] = useState<{
+    isRecording: boolean;
+    name: string | null;
+    bufferCount: number;
+  }>({ isRecording: false, name: null, bufferCount: 0 });
+
+  const fetchMacros = useCallback(async () => {
+    try {
+      const data = await getSystemMacros();
+      setMacros(data.macros || []);
+      setMacroRecording({
+        isRecording: data.is_recording,
+        name: data.active_macro || null,
+        bufferCount: data.buffer_count,
+      });
+    } catch {
+      // Fallback silently
+    }
+  }, []);
+
+  const handleDeleteMacro = useCallback(
+    async (macroName: string) => {
+      try {
+        await deleteSystemMacro(macroName);
+        await fetchMacros();
+      } catch (err) {
+        console.warn("Failed to delete macro:", err);
+      }
+    },
+    [fetchMacros],
+  );
 
   useEffect(() => {
     let isMounted = true;
-    const fetchVitals = async () => {
+    const fetchAll = async () => {
       try {
-        const data = await getSystemVitals();
-        if (isMounted) {
-          setVitals(data);
+        const [vitalsRes, macrosRes] = await Promise.allSettled([
+          getSystemVitals(),
+          getSystemMacros(),
+        ]);
+        if (isMounted && vitalsRes.status === "fulfilled") {
+          setVitals(vitalsRes.value);
+        }
+        if (isMounted && macrosRes.status === "fulfilled") {
+          setMacros(macrosRes.value.macros || []);
+          setMacroRecording({
+            isRecording: macrosRes.value.is_recording,
+            name: macrosRes.value.active_macro || null,
+            bufferCount: macrosRes.value.buffer_count,
+          });
         }
       } catch {
         // Fallback silently if server temporarily offline
       }
     };
-    fetchVitals();
-    const interval = setInterval(fetchVitals, 4000);
+    fetchAll();
+    const interval = setInterval(fetchAll, 4000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -525,6 +575,7 @@ export function AtlasCore({
         const reply = data.message || "Right away, sir. Task acknowledged.";
         setAtlasResponse(reply);
         speakAtlas(reply);
+        void fetchMacros();
       } catch (err: unknown) {
         if (actionTimerIntervalRef.current) {
           clearInterval(actionTimerIntervalRef.current);
@@ -553,7 +604,7 @@ export function AtlasCore({
         speakAtlas(errorReply);
       }
     },
-    [captureScreenFrame, speakAtlas, startRecognitionSafe],
+    [captureScreenFrame, fetchMacros, speakAtlas, startRecognitionSafe],
   );
 
   // -------------------------------------------------------------
@@ -1100,6 +1151,25 @@ export function AtlasCore({
             {atlasState.toUpperCase()}
           </span>
         </div>
+        {macroRecording.isRecording && (
+          <div className="hud-recording-badge">
+            <span className="rec-dot red pulsing" />
+            <span className="rec-text">
+              REC: {macroRecording.name} ({macroRecording.bufferCount})
+            </span>
+            <button
+              type="button"
+              className="rec-stop-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                void sendToAtlas("stop recording macro");
+              }}
+              title="Stop and save macro"
+            >
+              SAVE
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 3. Top-Right Audio & Memory Telemetry HUD */}
@@ -1130,6 +1200,10 @@ export function AtlasCore({
             </div>
           </>
         )}
+        <div className="hud-telemetry-row right-aligned">
+          <span>MACROS:</span>
+          <span className="hud-val">{macros.length} SAVED</span>
+        </div>
         <div className="hud-telemetry-row right-aligned">
           <span>FREQUENCY:</span>
           <span className="hud-val">{telemetry.frequency} HZ</span>
@@ -1345,6 +1419,52 @@ export function AtlasCore({
           </div>
         )}
 
+        {/* Holographic Quick Routine Bar */}
+        <div className="atlas-protocol-quick-bar" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() => void sendToAtlas("run macro morning_routine")}
+            title="Execute Morning Routine Macro"
+          >
+            ☀️ Morning Routine
+          </button>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() => void sendToAtlas("run macro standup_prep")}
+            title="Execute Standup Prep Macro"
+          >
+            📋 Standup Prep
+          </button>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() => void sendToAtlas("activate focus mode protocol")}
+            title="Engage Focus Mode Protocol"
+          >
+            🎯 Focus Mode
+          </button>
+          <button
+            type="button"
+            className="protocol-quick-btn"
+            onClick={() =>
+              void sendToAtlas(
+                macroRecording.isRecording
+                  ? "stop recording macro"
+                  : "start recording macro custom_task",
+              )
+            }
+            title={
+              macroRecording.isRecording
+                ? "Stop recording macro"
+                : "Record new custom macro"
+            }
+          >
+            {macroRecording.isRecording ? "⏹️ Save Macro" : "⏺️ Record Macro"}
+          </button>
+        </div>
+
         {/* Sleek Liquid-Glass Quick Command Bar */}
         <form
           className="atlas-command-bar"
@@ -1436,6 +1556,46 @@ export function AtlasCore({
               <h4>Settings &amp; Audio</h4>
               <p>Configure speech rate, pitch, and API preferences.</p>
             </Link>
+          </div>
+
+          <div className="console-macros-section">
+            <h4>Saved Desktop Macros ({macros.length})</h4>
+            <div className="macro-items-list">
+              {macros.length === 0 ? (
+                <p className="console-desc">
+                  No macros saved yet. Say &quot;Record macro [name]&quot; to capture actions.
+                </p>
+              ) : (
+                macros.map((m) => (
+                  <div key={m.name} className="macro-item-card">
+                    <div className="macro-info">
+                      <h5>{m.name}</h5>
+                      <p>
+                        {m.steps.length} steps &bull; {m.description}
+                      </p>
+                    </div>
+                    <div className="macro-actions">
+                      <button
+                        type="button"
+                        className="macro-btn play"
+                        onClick={() => void sendToAtlas(`run macro ${m.name}`)}
+                        title="Execute macro"
+                      >
+                        ▶ Play
+                      </button>
+                      <button
+                        type="button"
+                        className="macro-btn del"
+                        onClick={() => void handleDeleteMacro(m.name)}
+                        title="Delete macro"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </aside>
       )}

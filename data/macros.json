@@ -1,0 +1,63 @@
+{
+  "morning_routine": {
+    "name": "morning_routine",
+    "description": "Standard morning workstation setup: opens news, checks hardware vitals, and adjusts audio.",
+    "steps": [
+      {
+        "tool": "system.vitals",
+        "target": "workstation",
+        "arguments": {},
+        "description": "Assess workstation hardware vitals"
+      },
+      {
+        "tool": "system.volume_control",
+        "target": "master_audio",
+        "arguments": {
+          "action": "set",
+          "percent": 40
+        },
+        "description": "Level master audio to 40%"
+      },
+      {
+        "tool": "web.open",
+        "target": "https://news.ycombinator.com",
+        "arguments": {
+          "url": "https://news.ycombinator.com"
+        },
+        "description": "Open Hacker News portal"
+      }
+    ],
+    "created_at": "2026-11-16T00:00:00Z"
+  },
+  "standup_prep": {
+    "name": "standup_prep",
+    "description": "Prepares development and project management tools for daily team standup.",
+    "steps": [
+      {
+        "tool": "system.open_app",
+        "target": "code",
+        "arguments": {
+          "app_name": "code"
+        },
+        "description": "Focus Visual Studio Code"
+      },
+      {
+        "tool": "system.open_app",
+        "target": "terminal",
+        "arguments": {
+          "app_name": "terminal"
+        },
+        "description": "Launch PowerShell Terminal"
+      },
+      {
+        "tool": "web.open",
+        "target": "https://github.com",
+        "arguments": {
+          "url": "https://github.com"
+        },
+        "description": "Open GitHub dashboard"
+      }
+    ],
+    "created_at": "2026-11-16T00:00:00Z"
+  }
+}
