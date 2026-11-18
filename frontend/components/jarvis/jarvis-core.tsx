@@ -1,7 +1,7 @@
 "use client";
 
 import type { JSX } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { cleanTextForSpeech } from "@/services/voice";
 import {
@@ -63,6 +63,25 @@ interface SpeechRecognitionLike {
   start: () => void;
   abort: () => void;
   stop: () => void;
+}
+
+function subscribeOnline(callback: () => void): () => void {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getOnlineSnapshot(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.onLine === "boolean"
+    ? navigator.onLine
+    : true;
+}
+
+function getServerOnlineSnapshot(): boolean {
+  return true;
 }
 
 export interface AtlasCoreProps {
@@ -250,10 +269,8 @@ export function AtlasCore({
   }, []);
   const [hudConsoleOpen, setHudConsoleOpen] = useState(false);
   const [isScreenShared, setIsScreenShared] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean>(() => {
-    if (typeof navigator === "undefined") return true;
-    return navigator.onLine;
-  });
+  const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getServerOnlineSnapshot);
+  const prevOnlineRef = useRef(isOnline);
   const [isSfxMuted, setIsSfxMuted] = useState<boolean>(() => audioFx.isMuted());
   const [isMiniMode, setIsMiniMode] = useState<boolean>(initialMini);
   const isMiniModeRef = useRef<boolean>(initialMini);
@@ -261,8 +278,12 @@ export function AtlasCore({
   // Wake-Word & Follow-Up State
   const [isWakeWordEnabled, setIsWakeWordEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
-    const saved = localStorage.getItem("atlas_wake_word_enabled");
-    return saved === null ? true : saved === "true";
+    try {
+      const saved = localStorage.getItem("atlas_wake_word_enabled");
+      return saved === null ? true : saved === "true";
+    } catch {
+      return true;
+    }
   });
   const isWakeWordEnabledRef = useRef<boolean>(true);
   const [wakeWordTriggered, setWakeWordTriggered] = useState<boolean>(false);
@@ -300,24 +321,17 @@ export function AtlasCore({
     atlasStateRef.current = atlasState;
   }, [atlasState]);
 
-  // Real-time network connectivity sensing (Local Offline Fallback)
+  // Audio cue when network connectivity status changes
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleOnline = () => {
-      setIsOnline(true);
-      void audioFx.playSuccess();
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-      void audioFx.playAlert();
-    };
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+    if (prevOnlineRef.current !== isOnline) {
+      if (isOnline) {
+        void audioFx.playSuccess();
+      } else {
+        void audioFx.playAlert();
+      }
+      prevOnlineRef.current = isOnline;
+    }
+  }, [isOnline]);
 
   useEffect(() => {
     isActiveRef.current = isActive;
@@ -1317,11 +1331,13 @@ export function AtlasCore({
         </div>
         <div className="hud-telemetry-row">
           <span>CORE:</span>
-          <span className="hud-val">{isOnline ? "GEMINI FLASH LATEST" : "LOCAL OFFLINE CORE"}</span>
+          <span className="hud-val" suppressHydrationWarning>
+            {isOnline ? "GEMINI FLASH LATEST" : "LOCAL OFFLINE CORE"}
+          </span>
         </div>
         <div className="hud-telemetry-row">
           <span>LINK:</span>
-          <span className={`hud-val ${!isOnline ? "state-speaking" : ""}`}>
+          <span className={`hud-val ${!isOnline ? "state-speaking" : ""}`} suppressHydrationWarning>
             {isOnline ? "CLOUD CONNECTED" : "LOCAL AUTONOMOUS"}
           </span>
         </div>
@@ -1432,6 +1448,7 @@ export function AtlasCore({
           </button>
           <button
             type="button"
+            suppressHydrationWarning
             className={`hud-console-trigger ${isWakeWordEnabled ? "wakeword-active" : "wakeword-muted"}`}
             onClick={(e) => {
               e.stopPropagation();
@@ -1447,6 +1464,7 @@ export function AtlasCore({
           </button>
           <button
             type="button"
+            suppressHydrationWarning
             className={`hud-console-trigger ${isSfxMuted ? "sfx-muted" : "sfx-active"}`}
             onClick={(e) => {
               e.stopPropagation();
