@@ -21,6 +21,9 @@ import {
   type BrowserCDPStatus,
   type BrowserCDPTab,
   type GroundingSource,
+  getTTSStatus,
+  synthesizeSpeechAudio,
+  type TTSStatusResponse,
 } from "@/services/api";
 import type { SystemVitals } from "@/types";
 import { audioFx } from "@/services/audio-fx";
@@ -97,6 +100,9 @@ export function AtlasCore({
   const [newTabUrl, setNewTabUrl] = useState<string>("");
   const [liveSources, setLiveSources] = useState<GroundingSource[]>([]);
   const [liveQueries, setLiveQueries] = useState<string[]>([]);
+  const [voicePreset, setVoicePreset] = useState<string>("cinematic_british");
+  const [ttsStatus, setTtsStatus] = useState<TTSStatusResponse | null>(null);
+  const activeAudioElemRef = useRef<HTMLAudioElement | null>(null);
 
   const fetchMacros = useCallback(async () => {
     try {
@@ -204,11 +210,12 @@ export function AtlasCore({
     let isMounted = true;
     const fetchAll = async () => {
       try {
-        const [vitalsRes, macrosRes, cdpStatusRes, cdpTabsRes] = await Promise.allSettled([
+        const [vitalsRes, macrosRes, cdpStatusRes, cdpTabsRes, ttsRes] = await Promise.allSettled([
           getSystemVitals(),
           getSystemMacros(),
           getBrowserCDPStatus(),
           getBrowserCDPTabs(),
+          getTTSStatus(),
         ]);
         if (isMounted && vitalsRes.status === "fulfilled") {
           setVitals(vitalsRes.value);
@@ -226,6 +233,9 @@ export function AtlasCore({
         }
         if (isMounted && cdpTabsRes.status === "fulfilled") {
           setCdpTabs(cdpTabsRes.value.tabs || []);
+        }
+        if (isMounted && ttsRes.status === "fulfilled") {
+          setTtsStatus(ttsRes.value);
         }
       } catch {
         // Fallback silently if server temporarily offline
@@ -387,24 +397,18 @@ export function AtlasCore({
   }, []);
 
   // -------------------------------------------------------------
-  // 2. Speech Synthesis (ATLAS Voice Protocol)
+  // 2. Speech Synthesis (ATLAS Voice Protocol & Neural TTS)
   // -------------------------------------------------------------
-  const speakAtlas = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-
-    window.speechSynthesis.cancel();
-    const cleanText = cleanTextForSpeech(text);
-    if (!cleanText) {
-      isBusyRef.current = false;
-      setAtlasState("listening");
-      startRecognitionSafe();
+  const speakWithBrowserSynthesis = useCallback((cleanText: string, onComplete: () => void) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      onComplete();
       return;
     }
 
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
     const voices = window.speechSynthesis.getVoices();
 
-    // Prefer British/UK deep clear male voices (Paul Bettany style)
     const britishMale = voices.find(
       (v) =>
         (v.lang.includes("en-GB") || v.lang.includes("en_GB")) &&
@@ -428,7 +432,7 @@ export function AtlasCore({
 
     if (englishVoice) {
       utterance.voice = englishVoice;
-      setTelemetry((prev) => ({ ...prev, activeVoice: englishVoice.name }));
+      setTelemetry((prev) => ({ ...prev, activeVoice: `${englishVoice.name} (Native)` }));
     }
 
     utterance.pitch = 0.94;
@@ -444,8 +448,41 @@ export function AtlasCore({
       } catch {}
     };
 
-    const handleSpeechComplete = () => {
+    const finish = () => {
       if (fallbackTimer) clearTimeout(fallbackTimer);
+      onComplete();
+    };
+
+    utterance.onend = finish;
+    utterance.onerror = finish;
+
+    const wordCount = cleanText.split(/\s+/).length;
+    const estimatedDurationMs = Math.max(3200, (wordCount / 2.0) * 1000 + 2200);
+    fallbackTimer = setTimeout(finish, estimatedDurationMs);
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const speakAtlas = useCallback((text: string) => {
+    if (typeof window === "undefined") return;
+
+    if (activeAudioElemRef.current) {
+      activeAudioElemRef.current.pause();
+      activeAudioElemRef.current = null;
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    const cleanText = cleanTextForSpeech(text);
+    if (!cleanText) {
+      isBusyRef.current = false;
+      setAtlasState("listening");
+      startRecognitionSafe();
+      return;
+    }
+
+    const handleSpeechComplete = () => {
       setAtlasState("standby");
       void audioFx.playStandby();
       setTimeout(() => {
@@ -453,7 +490,6 @@ export function AtlasCore({
         accumulatedTextRef.current = "";
         setTranscript("");
         if (isActiveRef.current || isWakeWordEnabledRef.current) {
-          // Open follow-up listening window for continuous conversation
           setAtlasState("listening");
           void audioFx.playListenStart();
           startRecognitionSafe();
@@ -469,16 +505,52 @@ export function AtlasCore({
       }, 450);
     };
 
-    utterance.onend = handleSpeechComplete;
-    utterance.onerror = handleSpeechComplete;
+    // If Neural TTS is enabled, attempt backend stream
+    if (voicePreset !== "browser") {
+      void (async () => {
+        try {
+          const resp = await synthesizeSpeechAudio(cleanText, voicePreset);
+          const cType = resp.headers.get("content-type") || "";
+          if (resp.ok && (cType.includes("audio/mpeg") || cType.includes("audio/wav"))) {
+            const blob = await resp.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+            activeAudioElemRef.current = audio;
 
-    // Safety fallback: ensure speech state unlocks even if browser drops onend
-    const wordCount = cleanText.split(/\s+/).length;
-    const estimatedDurationMs = Math.max(3200, (wordCount / 2.0) * 1000 + 2200);
-    fallbackTimer = setTimeout(handleSpeechComplete, estimatedDurationMs);
+            isBusyRef.current = true;
+            setAtlasState("speaking");
+            setTelemetry((prev) => ({
+              ...prev,
+              activeVoice: voicePreset === "cinematic_british" ? "Cinematic British (Neural)" : "Tactical Crisp (Neural)",
+            }));
+            try {
+              recognitionRef.current?.abort();
+            } catch {}
 
-    window.speechSynthesis.speak(utterance);
-  }, [startRecognitionSafe]);
+            audio.onended = () => {
+              URL.revokeObjectURL(audioUrl);
+              activeAudioElemRef.current = null;
+              handleSpeechComplete();
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(audioUrl);
+              activeAudioElemRef.current = null;
+              speakWithBrowserSynthesis(cleanText, handleSpeechComplete);
+            };
+
+            await audio.play();
+            return;
+          }
+        } catch {
+          // Fall back gracefully
+        }
+        speakWithBrowserSynthesis(cleanText, handleSpeechComplete);
+      })();
+      return;
+    }
+
+    speakWithBrowserSynthesis(cleanText, handleSpeechComplete);
+  }, [voicePreset, speakWithBrowserSynthesis, startRecognitionSafe]);
 
   // Screen Streaming & Multimodal Vision Helpers
   const stopScreenShare = useCallback(() => {
@@ -1566,10 +1638,10 @@ export function AtlasCore({
           <button
             type="button"
             className="protocol-quick-btn"
-            onClick={() => void sendToAtlas("run macro morning_routine")}
-            title="Execute Morning Routine Macro"
+            onClick={() => void sendToAtlas("good morning, give me my executive briefing")}
+            title="Execute Autonomous Executive Morning Briefing"
           >
-            ☀️ Morning Routine
+            ☀️ Executive Briefing
           </button>
           <button
             type="button"
@@ -1846,6 +1918,56 @@ export function AtlasCore({
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          <div className="console-macros-section">
+            <div className="cdp-section-header">
+              <h4>Neural Voice Synthesis Engine</h4>
+              <span className={`cdp-conn-pill ${ttsStatus?.has_elevenlabs ? "connected" : "standby"}`}>
+                {ttsStatus?.has_elevenlabs ? "ELEVENLABS ONLINE" : "BROWSER NATIVE"}
+              </span>
+            </div>
+            <p className="console-desc" style={{ marginBottom: "0.6rem" }}>
+              Active Voice Model: <strong>{voicePreset === "cinematic_british" ? "Cinematic British (JARVIS)" : voicePreset === "tactical_crisp" ? "Tactical Crisp" : "Browser Web Speech"}</strong>
+            </p>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={`protocol-quick-btn ${voicePreset === "cinematic_british" ? "wakeword-active" : ""}`}
+                onClick={() => {
+                  setVoicePreset("cinematic_british");
+                  setTelemetry((prev) => ({ ...prev, activeVoice: "Cinematic British (Neural)" }));
+                  speakAtlas("Voice synthesizer configured to Cinematic British, sir.");
+                }}
+                title="Hyper-realistic studio-grade British gentleman neural voice"
+              >
+                👑 Cinematic British
+              </button>
+              <button
+                type="button"
+                className={`protocol-quick-btn ${voicePreset === "tactical_crisp" ? "wakeword-active" : ""}`}
+                onClick={() => {
+                  setVoicePreset("tactical_crisp");
+                  setTelemetry((prev) => ({ ...prev, activeVoice: "Tactical Crisp (Neural)" }));
+                  speakAtlas("Tactical crisp neural voice online and operational, sir.");
+                }}
+                title="Fast, clear operational neural voice"
+              >
+                ⚡ Tactical Crisp
+              </button>
+              <button
+                type="button"
+                className={`protocol-quick-btn ${voicePreset === "browser" ? "wakeword-active" : ""}`}
+                onClick={() => {
+                  setVoicePreset("browser");
+                  setTelemetry((prev) => ({ ...prev, activeVoice: "Browser Web Speech (Native)" }));
+                  speakAtlas("Native browser speech synthesis engaged, sir.");
+                }}
+                title="Zero-latency local browser synthesis"
+              >
+                🔊 Native Browser
+              </button>
             </div>
           </div>
         </aside>

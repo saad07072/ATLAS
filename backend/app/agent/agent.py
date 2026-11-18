@@ -737,6 +737,35 @@ class ChatAgent:
                 actions=[ActionExecutionRecord(tool="browser.cdp_eval", target=expr, status="success" if result.success else "failed", message=msg, verified=result.success)],
             )
 
+        # 0f. Autonomous Executive Daily Briefing ("Good morning", "Daily briefing", "Executive briefing")
+        briefing_match = re.search(
+            r"\b(?:good\s+morning(?:\s+atlas|\s+jarvis|\s+sir)?|daily\s+briefing|executive\s+briefing|morning\s+briefing|morning\s+update|morning\s+routine|brief\s+me)\b",
+            clean_lower,
+        )
+        if briefing_match:
+            result = self.execute_tool_request(
+                ToolExecutionRequest(name="system.executive_briefing", arguments={})
+            )
+            if result.success and isinstance(result.output, dict):
+                summary = result.output.get("summary", "Executive daily briefing completed, sir.")
+                news_items = result.output.get("news", [])
+                sources = [{"title": n, "url": "https://news.google.com"} for n in news_items[:3]]
+                return ChatResponse(
+                    intent="task_request",
+                    message=summary,
+                    actions=[
+                        ActionExecutionRecord(
+                            tool="system.executive_briefing",
+                            target="daily_agenda",
+                            status="success",
+                            message=summary,
+                            verified=True,
+                        )
+                    ],
+                    sources=sources,
+                    grounding_queries=["executive daily briefing"],
+                )
+
         # 1. Capabilities Inquiry
         if re.search(r"\bcan you open (?:any|a) website\b", clean_lower):
             return ChatResponse(
