@@ -260,3 +260,111 @@ def launch_browser_cdp_endpoint(payload: BrowserCDPLaunchRequest) -> dict[str, A
     return {"status": "success" if ok else "failed", "message": msg, "port": payload.port}
 
 
+# ==============================================================================
+# TTS Neural Speech Synthesis Endpoints
+# ==============================================================================
+
+class TTSRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=4000)
+    voice_preset: str = Field(default="cinematic_british", description="cinematic_british | tactical_crisp | browser")
+    voice_id: str | None = None
+
+
+@router.get("/tts/status")
+def get_tts_status() -> dict[str, Any]:
+    import os
+    from backend.app.config.settings import settings
+    has_key = bool(settings.elevenlabs_api_key or os.environ.get("ELEVENLABS_API_KEY"))
+    return {
+        "engine": "elevenlabs" if has_key else "browser",
+        "has_elevenlabs": has_key,
+        "default_voice_id": settings.elevenlabs_voice_id,
+        "available_presets": [
+            {"id": "cinematic_british", "name": "Cinematic British (JARVIS)", "desc": "Deep, polished British gentleman neural voice"},
+            {"id": "tactical_crisp", "name": "Tactical Crisp (Neural)", "desc": "Fast, authoritative operations neural voice"},
+            {"id": "browser", "name": "Web Audio / Browser Synthesis", "desc": "Zero-latency native system synthesizer"},
+        ],
+    }
+
+
+@router.post("/tts")
+def synthesize_speech(payload: TTSRequest):
+    """
+    Synthesizes speech using ElevenLabs Neural TTS if configured,
+    or returns browser synthesis fallback instructions.
+    """
+    import io
+    import json
+    import os
+    import re
+    import urllib.error
+    import urllib.request
+    from fastapi.responses import JSONResponse, Response
+    from backend.app.config.settings import settings
+
+    api_key = settings.elevenlabs_api_key or os.environ.get("ELEVENLABS_API_KEY")
+
+    # Clean text of markdown and code formatting
+    clean_text = re.sub(r"```[\s\S]*?```", "Code omitted.", payload.text)
+    clean_text = re.sub(r"`([^`]+)`", r"\1", clean_text)
+    clean_text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean_text)
+    clean_text = re.sub(r"[#*_~>]+", " ", clean_text)
+    clean_text = re.sub(r"\s+", " ", clean_text).strip()
+
+    if api_key and payload.voice_preset != "browser":
+        # Resolve voice id: default George (British Gentleman)
+        voice_id = payload.voice_id or settings.elevenlabs_voice_id or "JBFqnCBsd6RMkjVDRZzb"
+        if payload.voice_preset == "tactical_crisp":
+            voice_id = "onwK4e9ZLuTAKqWW03F9"
+
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        req_body = json.dumps({
+            "text": clean_text[:2000],
+            "model_id": "eleven_turbo_v2_5",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.85,
+            }
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=req_body,
+            headers={
+                "xi-api-key": api_key,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+                "User-Agent": "ATLAS/2.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                audio_bytes = resp.read()
+            return Response(
+                content=audio_bytes,
+                media_type="audio/mpeg",
+                headers={
+                    "X-TTS-Engine": "elevenlabs",
+                    "X-Voice-Preset": payload.voice_preset,
+                    "Cache-Control": "public, max-age=3600",
+                },
+            )
+        except Exception:
+            pass
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "fallback",
+            "engine": "browser",
+            "voice_preset": payload.voice_preset,
+            "lang": "en-GB",
+            "pitch": 0.94,
+            "rate": 1.03,
+            "clean_text": clean_text,
+        },
+    )
+
+

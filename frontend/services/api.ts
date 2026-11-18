@@ -540,3 +540,29 @@ export async function launchDebugBrowser(
     body: JSON.stringify({ url, port }),
   });
 }
+
+export interface TTSStatusResponse {
+  engine: "elevenlabs" | "browser";
+  has_elevenlabs: boolean;
+  default_voice_id: string;
+  available_presets: Array<{ id: string; name: string; desc: string }>;
+}
+
+export async function getTTSStatus(): Promise<TTSStatusResponse> {
+  return request<TTSStatusResponse>("/api/v1/system/tts/status");
+}
+
+export async function synthesizeSpeechAudio(
+  text: string,
+  voicePreset = "cinematic_british",
+): Promise<Response> {
+  const accessToken = (await getSupabaseAccessToken()) || "atlas-dev-bearer-token";
+  return fetch(`${activeApiBaseUrl}/api/v1/system/tts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ text, voice_preset: voicePreset }),
+  });
+}

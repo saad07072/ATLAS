@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3"
     offline_fallback_enabled: bool = False
     gemini_grounding_enabled: bool = True
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
+    tts_engine: str = "auto"
 
     google_oauth_client_id: str | None = Field(
         default=None,

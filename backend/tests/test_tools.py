@@ -581,6 +581,56 @@ class ToolFrameworkTests(unittest.TestCase):
             self.assertEqual(launch_out.status, "success")
             self.assertTrue(launch_out.verified)
 
+    def test_executive_briefing_tool(self) -> None:
+        from backend.app.tools.system_tools import (
+            ExecutiveBriefingTool,
+            ExecutiveBriefingInput,
+        )
+
+        tool = ExecutiveBriefingTool()
+        out = tool.execute(ExecutiveBriefingInput(location="London"))
+        self.assertEqual(out.status, "success")
+        self.assertTrue(out.verified)
+        self.assertIn(out.greeting, ["Good morning, sir", "Good afternoon, sir", "Good evening, sir"])
+        self.assertTrue(len(out.summary) > 20)
+        self.assertIn("weather", out.summary.lower())
+        self.assertIn("vitals", out.summary.lower())
+        self.assertIsInstance(out.weather, dict)
+        self.assertIsInstance(out.vitals, dict)
+        self.assertIsInstance(out.news, list)
+        self.assertGreaterEqual(len(out.news), 1)
+
+    def test_tts_status_and_synthesis(self) -> None:
+        from fastapi.testclient import TestClient
+        from backend.app.main import app
+
+        client = TestClient(app)
+
+        # 1. Status endpoint
+        resp = client.get("/api/v1/system/tts/status")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("engine", data)
+        self.assertIn("available_presets", data)
+        self.assertEqual(len(data["available_presets"]), 3)
+
+        # 2. Synthesis fallback endpoint
+        tts_resp = client.post(
+            "/api/v1/system/tts",
+            json={
+                "text": "Good morning, sir. **All systems nominal** in `develop` branch.",
+                "voice_preset": "browser",
+            },
+        )
+        self.assertEqual(tts_resp.status_code, 200)
+        fallback = tts_resp.json()
+        self.assertEqual(fallback["engine"], "browser")
+        self.assertEqual(fallback["lang"], "en-GB")
+        # Ensure markdown formatting is cleaned out
+        self.assertNotIn("**", fallback["clean_text"])
+        self.assertNotIn("`", fallback["clean_text"])
+        self.assertIn("All systems nominal", fallback["clean_text"])
+
 
 if __name__ == "__main__":
     unittest.main()

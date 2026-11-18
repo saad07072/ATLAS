@@ -855,6 +855,40 @@ class ChatAgentTests(unittest.IsolatedAsyncioTestCase):
         memory_service.store.assert_called_once()
         self.assertIn("user-123", memory_service.store.call_args[0])
 
+    def test_executive_briefing_intent_routing(self) -> None:
+        from backend.app.tools.models import ToolExecutionMetadata, ToolResult
+
+        tool_executor = Mock()
+        tool_executor.registry._tools = {
+            "system.executive_briefing": Mock(),
+        }
+        tool_executor.execute.return_value = ToolResult(
+            tool_name="system.executive_briefing",
+            success=True,
+            output={
+                "status": "success",
+                "summary": "Good morning, sir. Today is Monday. Weather is 20C. Systems nominal.",
+                "greeting": "Good morning, sir",
+                "date_str": "Monday, November 16, 2026",
+                "weather": {"temp_c": 20.0},
+                "news": ["World summit"],
+                "vitals": {"cpu_percent": 12.0},
+            },
+            metadata=ToolExecutionMetadata(duration_ms=8.0),
+        )
+        agent = ChatAgent(self.provider, tool_executor=tool_executor)
+
+        # 1. Good morning
+        resp = agent.respond(ChatRequest(message="Good morning, ATLAS"))
+        self.assertEqual(resp.intent, "task_request")
+        self.assertEqual(resp.actions[0].tool, "system.executive_briefing")
+        self.assertIn("Good morning, sir", resp.message)
+
+        # 2. Executive briefing
+        resp_brief = agent.respond(ChatRequest(message="give me my executive briefing"))
+        self.assertEqual(resp_brief.intent, "task_request")
+        self.assertEqual(resp_brief.actions[0].tool, "system.executive_briefing")
+
 
 if __name__ == "__main__":
     unittest.main()
