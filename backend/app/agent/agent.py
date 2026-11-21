@@ -40,6 +40,10 @@ SYSTEM_INSTRUCTION = (
     "When asked about current events, latest news, scores, releases, weather, or real-time facts, always synthesize up-to-date real data. "
     "When reporting on executed actions, always confirm the truthful outcome in definite past tense "
     "(e.g. 'I have opened YouTube for you in a new tab, sir' or 'The current weather in London is 8.3°C and Clear'). "
+    "CRITICAL GROUNDING INVARIANT: Never claim, simulate, or hallucinate that you executed a physical action "
+    "(such as creating/writing a file, launching an app, adjusting volume, or listing active windows) unless the explicit tool execution "
+    "output is provided directly in the prompt context. If an action has not been executed, provide the solution or code cleanly "
+    "without falsely claiming it was already saved or performed on the user's workstation. "
     "Never promise future action or use ambiguous present continuous phrasing like 'Opening YouTube...' when confirming an action. "
     "Be concise, crisp, highly capable, and speak in a polished British assistant persona. "
     "Never request or reveal API keys or credentials."
@@ -1080,10 +1084,11 @@ class ChatAgent:
                 )
 
         # 8c. Natural Language File Creation & Code Generation to File
-        # Matches: "write a python code for fibonacci and make a file in the download", etc.
+        # Matches: "write a python code for fibonacci and make a file in the download", "save a script named test_even.py in downloads", etc.
         nl_create_match = (
-            re.search(r"\b(?:make|create|write|save|generate)\s+(?:a\s+)?(?:new\s+)?(?:[a-zA-Z0-9_]+\s+)?file\b", clean_lower)
-            or ("file in" in clean_lower and any(w in clean_lower for w in ("download", "downloads", "desktop", "documents")))
+            re.search(r"\b(?:make|create|write|save|generate)\s+(?:a\s+)?(?:new\s+)?(?:[a-zA-Z0-9_]+\s+)?(?:file|script|code|program)\b", clean_lower)
+            or any(f"{w} in" in clean_lower for w in ("file", "script", "code"))
+            or ("save" in clean_lower and any(w in clean_lower for w in ("download", "downloads", "desktop", "documents")))
         )
         if nl_create_match and any(w in clean_lower for w in ("download", "desktop", "document", "folder", "directory")):
             from pathlib import Path
@@ -1386,7 +1391,7 @@ class ChatAgent:
 
         # 12. List Active Windows / Running Applications
         list_windows_match = re.search(
-            r"\b(?:what\s+windows|what\s+apps|which\s+apps|list\s+(?:open\s+)?(?:windows|apps|applications)|show\s+open\s+windows|show\s+active\s+apps|running\s+applications|what\s+is\s+running)\b",
+            r"\b(?:what\s+windows|what\s+apps|which\s+apps|list\s+(?:all\s+)?(?:open\s+)?(?:windows|apps|applications)|show\s+(?:all\s+)?(?:open\s+)?windows|show\s+active\s+apps|running\s+applications|what\s+is\s+running)\b",
             clean_lower,
         )
         if list_windows_match:
