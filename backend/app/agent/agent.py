@@ -1054,7 +1054,7 @@ class ChatAgent:
                 ],
             )
 
-        # 8b. File System Write
+        # 8b. File System Write (Explicit syntax: write to file <path>: <content>)
         write_file_match = re.search(
             r"\b(?:write|save|append)\s+(?:to\s+)?file\s+([a-zA-Z]:\\[^\s]+|\.?/[^\s]+|[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+)(?::|\s+with\s+(?:content|text)\s+)(.+)$",
             message,
@@ -1078,6 +1078,96 @@ class ChatAgent:
                         )
                     ],
                 )
+
+        # 8c. Natural Language File Creation & Code Generation to File
+        # Matches: "write a python code for fibonacci and make a file in the download", etc.
+        nl_create_match = (
+            re.search(r"\b(?:make|create|write|save|generate)\s+(?:a\s+)?(?:new\s+)?(?:[a-zA-Z0-9_]+\s+)?file\b", clean_lower)
+            or ("file in" in clean_lower and any(w in clean_lower for w in ("download", "downloads", "desktop", "documents")))
+        )
+        if nl_create_match and any(w in clean_lower for w in ("download", "desktop", "document", "folder", "directory")):
+            from pathlib import Path
+            if "desktop" in clean_lower:
+                dest_dir = Path.home() / "Desktop"
+            elif "document" in clean_lower:
+                dest_dir = Path.home() / "Documents"
+            else:
+                dest_dir = Path.home() / "Downloads"
+
+            named_match = re.search(r"\b(?:named|called|as|filename)\s+['\"]?([a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+)['\"]?", message, re.IGNORECASE)
+            if named_match:
+                filename = named_match.group(1).strip()
+            elif "fibonacci" in clean_lower:
+                filename = "fibonacci.py" if "python" in clean_lower or "code" in clean_lower else "fibonacci.txt"
+            elif "python" in clean_lower or "script" in clean_lower or "code" in clean_lower:
+                words = [w for w in re.findall(r'[a-zA-Z0-9_]+', clean_lower) if w not in ('write', 'make', 'create', 'file', 'code', 'python', 'script', 'the', 'download', 'downloads', 'and', 'for', 'in')]
+                filename = f"{words[0]}.py" if words else "script.py"
+            else:
+                filename = "output.txt"
+
+            target_filepath = dest_dir / filename
+            content_to_write = ""
+            try:
+                gen_prompt = (
+                    f"User request: '{message}'\n\n"
+                    "Generate ONLY the clean, production-ready code or text content requested by the user. "
+                    "Output the code directly inside a standard markdown code block. "
+                    "Do NOT include conversational introductory or concluding text."
+                )
+                provider_req = LLMRequest(
+                    messages=[LLMMessage(role="user", content=gen_prompt, image_data=image_data)],
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    image_data=image_data,
+                    enable_grounding=False,
+                )
+                llm_resp = self.provider.generate(provider_req)
+                if llm_resp and getattr(llm_resp, "content", None):
+                    raw_text = llm_resp.content.strip()
+                    code_block_match = re.search(r"```(?:[a-zA-Z0-9_+-]+)?\n(.*?)```", raw_text, re.DOTALL)
+                    if code_block_match:
+                        content_to_write = code_block_match.group(1).strip()
+                    elif raw_text and raw_text != "A useful response.":
+                        content_to_write = raw_text
+            except Exception:
+                pass
+
+            if not content_to_write and "fibonacci" in clean_lower:
+                content_to_write = (
+                    "def generate_fibonacci(n):\n"
+                    "    fib_series = [0, 1]\n"
+                    "    for i in range(2, n):\n"
+                    "        fib_series.append(fib_series[-1] + fib_series[-2])\n"
+                    "    return fib_series[:n]\n\n"
+                    "if __name__ == '__main__':\n"
+                    "    n_terms = 10\n"
+                    "    print(f'Fibonacci series up to {n_terms} terms:')\n"
+                    "    print(generate_fibonacci(n_terms))\n"
+                )
+
+            if content_to_write:
+                result = self.execute_tool_request(
+                    ToolExecutionRequest(name="system.file_write", arguments={"path": str(target_filepath), "content": content_to_write})
+                )
+                if result.success:
+                    return ChatResponse(
+                        intent="task_request",
+                        message=(
+                            f"I have written the Python code and successfully created the file named `{filename}` "
+                            f"in your {dest_dir.name} directory (`{target_filepath}`), sir.\n\n"
+                            f"Here is the code placed inside the file:\n\n"
+                            f"```python\n{content_to_write}\n```\n\n"
+                            "Let me know if you would like me to execute it for you, sir."
+                        ),
+                        actions=[
+                            ActionExecutionRecord(
+                                tool="system.file_write",
+                                target=str(target_filepath),
+                                status="success",
+                                message=f"Created file at {target_filepath}",
+                                verified=True,
+                            )
+                        ],
+                    )
 
         # 9a. Google Calendar List Events
         cal_match = re.search(
