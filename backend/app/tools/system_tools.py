@@ -713,9 +713,59 @@ class LiveSearchTool(Tool):
             raise TypeError("LiveSearchTool requires LiveSearchInput arguments.")
 
         query = arguments.query.strip()
+        q_lower = query.lower()
         encoded = urllib.parse.quote(query)
         headlines: list[str] = []
         sources: list[dict[str, str]] = []
+
+        # 0. Live Sports Feed: Cricinfo RSS for real-time live match scores and scorecards
+        cricket_keywords = ("cricket", "score", "match", "wicket", "test", "t20", "ipl", "odi", "india", "versus", "vs", "scorecard")
+        if any(kw in q_lower for kw in cricket_keywords):
+            try:
+                cricinfo_url = "https://static.cricinfo.com/rss/livescores.xml"
+                req_cric = urllib.request.Request(
+                    cricinfo_url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ATLAS/2.0"},
+                )
+                with urllib.request.urlopen(req_cric, timeout=3.0) as resp:
+                    cric_data = resp.read()
+                import xml.etree.ElementTree as ET
+                cric_root = ET.fromstring(cric_data)
+                
+                # Extract search tokens from user query
+                tokens = [t for t in re.findall(r'[a-zA-Z]+', q_lower) if len(t) > 2 and t not in ('score', 'match', 'today', 'give', 'mean', 'live', 'scorecard', 'versus', 'the', 'not')]
+                
+                matched_items = []
+                for item in cric_root.findall(".//item"):
+                    title = (item.find("title").text if item.find("title") is not None else "").strip()
+                    link = (item.find("link").text if item.find("link") is not None else "").strip()
+                    if not title:
+                        continue
+                    t_lower = title.lower()
+                    if tokens:
+                        match_count = sum(1 for t in tokens if t in t_lower)
+                        if match_count >= 2 or (len(tokens) == 1 and tokens[0] in t_lower):
+                            matched_items.append((title, link))
+                    else:
+                        matched_items.append((title, link))
+                
+                # If no specific team match was found, include the top live matches
+                if not matched_items and ("score" in q_lower or "cricket" in q_lower or "live" in q_lower):
+                    for item in cric_root.findall(".//item")[:3]:
+                        title = (item.find("title").text if item.find("title") is not None else "").strip()
+                        link = (item.find("link").text if item.find("link") is not None else "").strip()
+                        if title:
+                            matched_items.append((title, link))
+
+                for m_title, m_link in matched_items[:5]:
+                    if m_title not in headlines:
+                        headlines.append(m_title)
+                        sources.append({
+                            "title": m_title,
+                            "url": m_link or "https://www.espncricinfo.com",
+                        })
+            except Exception as exc:
+                logger.info("Cricinfo live scores feed failed for '%s': %s", query, exc)
 
         # 1. Primary Live Feed: Google News RSS for live sports, breaking news, match updates
         rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"

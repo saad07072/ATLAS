@@ -488,9 +488,39 @@ class ChatAgent:
             result = self.execute_tool_request(ToolExecutionRequest(name="web.search", arguments={"query": target_query}))
             if result.success and isinstance(result.output, dict):
                 summary = result.output.get("summary", f"Live data retrieved for {target_query}.")
+                headlines = result.output.get("headlines", [])
+                raw_sources = result.output.get("sources", [])
+                sources: list[dict[str, str]] = []
+                if isinstance(raw_sources, list):
+                    sources = [s for s in raw_sources if isinstance(s, dict)]
+
+                evidence_text = "\n".join(f"- {h}" for h in headlines) if headlines else summary
+                synthesized_message = summary
+                try:
+                    evidence_prompt = (
+                        f"Verified Real-Time Live Data (100% current ground truth for query '{target_query}'):\n"
+                        f"{evidence_text}\n\n"
+                        f"User query: '{message}'\n\n"
+                        f"Synthesize an accurate, polished, and truthful British assistant briefing for the user based strictly on the verified live evidence above. "
+                        f"If this is a sports match or scorecard, format the scores cleanly with team runs, wickets, overs, and match status."
+                    )
+                    provider_req = LLMRequest(
+                        messages=[LLMMessage(role="user", content=evidence_prompt, image_data=image_data)],
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        image_data=image_data,
+                        enable_grounding=False,
+                    )
+                    llm_resp = self.provider.generate(provider_req)
+                    if llm_resp and getattr(llm_resp, "content", None):
+                        resp_content = llm_resp.content.strip()
+                        if resp_content and resp_content != "A useful response.":
+                            synthesized_message = resp_content
+                except Exception:
+                    pass
+
                 return ChatResponse(
                     intent="task_request",
-                    message=f"{summary}",
+                    message=synthesized_message,
                     actions=[
                         ActionExecutionRecord(
                             tool="web.search",
@@ -500,6 +530,8 @@ class ChatAgent:
                             verified=True,
                         )
                     ],
+                    sources=sources,
+                    grounding_queries=[target_query],
                 )
 
         # 0c. Offline Mode & Local Execution Status
